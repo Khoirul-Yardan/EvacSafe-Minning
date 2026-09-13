@@ -1,0 +1,9 @@
+[CorridorInspector] Running in delayCall...
+[CorridorInspector] FindAssets('corridor') found: 2 items
+ - guid: 05cb1f0ae9322fd4cb70f373a817d12e -> path: Assets/Models/corridor.fbx
+ - guid: 2739e142428d8a345989552996063068 -> path: Assets/Scripts/Editor/CorridorInspector.cs
+[CorridorInspector] importer found! globalScale=1, useFileScale=True, importNormals=Import, isReadable=False
+[CorridorInspector] Prefab Name: corridor, Children count: 0, Renderers count: 1
+ - Renderer: corridor, Type: MeshRenderer, Bounds size: (33.12, 5.97, 56.46), localScale: (100.00, 100.00, 100.00)
+ - MeshFilter: corridor, Mesh: tunnel, Mesh bounds: (0.33, 0.06, 0.56), vertexCount: 221571
+[CorridorInspector] Total Bounds: Center=(9.22, -0.16, -18.82), Size=(33.12, 5.97, 56.46)
