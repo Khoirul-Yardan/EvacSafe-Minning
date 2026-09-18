@@ -128,6 +128,13 @@ public static class MiningExperienceValidation
             frames++;
             if (phase == 0 && frames > 5)
             {
+                var documentation = MiningDocumentationPreview.Find(simulation.gameObject.scene);
+                if (documentation != null)
+                {
+                    Assert(!documentation.gameObject.activeInHierarchy, "Editor preview duplicated runtime geometry");
+                    Assert(documentation.CompareTag("EditorOnly"), "Documentation objects would enter player builds");
+                    results.Add("PASS editor preview disabled before Play; EditorOnly hierarchy excluded from builds.");
+                }
                 Capture("01-menu");
                 ValidateGeometry(simulation);
                 simulation.Begin(MiningMode.Story, true); Time.timeScale = 12;

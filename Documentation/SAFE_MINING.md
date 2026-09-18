@@ -2,6 +2,24 @@
 
 Buka `Assets/Scenes/SafeMining_Experience.unity`, lalu tekan **Play**. Pilih **Mode Cerita** atau **Mode FPP**. Jika scene belum terlihat setelah Unity selesai mengimpor, gunakan menu **SafeMining → Open Story + FPP Experience**. Scene demo sebelumnya tetap tersedia.
 
+## Dokumentasi tanpa Play
+
+Scene yang sama memiliki hierarchy **EDITOR PREVIEW | Documentation (excluded from Play)**. Map, karakter, lampu, rel, rambu, dan kamera dokumentasi tersimpan sebagai objek scene; mesh dan materialnya berada di `Assets/Generated/MiningDocumentation/PreviewResources.asset` agar tetap tampil setelah Unity dibuka ulang.
+
+Pilih root **EDITOR PREVIEW** di Hierarchy. Inspector menyediakan:
+
+- **Seluruh map / atap terbuka**: menampilkan susunan lorong dari atas; paling sesuai untuk dokumentasi denah.
+- **Sudut kamera cerita**: tampilan dari belakang pekerja, dengan atap ditampilkan.
+- **Sudut kamera FPP**: tampilan setinggi mata pekerja.
+- **Tampilkan contoh longsor**: memperlihatkan tumpukan batu untuk dokumentasi bahaya.
+- **Ekspor gambar PNG 1920 x 1080**: menyimpan sudut kamera yang dipilih ke `Documentation/Previews/editor-overview.png`, `editor-story.png`, atau `editor-fpp.png`. Ekspor ulang mengganti gambar sudut tersebut.
+
+Ketiga pilihan kamera juga tersedia pada menu **SafeMining → Documentation**. Kamera terpilih terlihat langsung di **Game View** tanpa Play; **Scene View** dapat diputar dan diperbesar seperti biasa. Aktifkan **Gizmos** untuk label titik awal, zona aman, dan potensi longsor. PNG kamera tidak menyertakan label Gizmos atau HUD permainan; gambar HUD tetap diambil saat Play.
+
+Pratinjau ini untuk dokumentasi. Perubahan manual pada objek pratinjau tidak mengubah map runtime; perubahan denah utama tetap melalui `MineLayout`. Gunakan **Rebuild Editor Preview** setelah mengubah generator. Rebuild mengganti hierarchy dan resource pratinjau yang dihasilkan, jadi jangan menyimpan aset buatan sendiri di resource generated tersebut.
+
+Saat Play, seluruh pratinjau dinonaktifkan sebelum simulasi membuat objek runtime. Tag `EditorOnly` juga mengecualikannya dari build. Setelah Stop, tampilan editor kembali. Scene tidak lagi perlu dijalankan hanya untuk melihat bentuk map.
+
 ## Kontrol
 
 | Kontrol | Fungsi |

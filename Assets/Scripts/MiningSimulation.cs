@@ -89,7 +89,7 @@ namespace SafeMining
             UpdateCamera(true);
         }
 
-        void BuildActor()
+        void BuildActor(bool documentation = false)
         {
             Actor = new GameObject("Worker | Story + FPP").transform; Actor.SetParent(transform, false);
             Actor.gameObject.layer = 2; // Exclude the worker's own capsule from camera obstruction probes.
@@ -131,6 +131,7 @@ namespace SafeMining
             ViewCamera.clearFlags = CameraClearFlags.SolidColor; ViewCamera.backgroundColor = RenderSettings.fogColor;
             var light = cameraGO.AddComponent<Light>(); light.type = LightType.Spot; light.range = 24; light.spotAngle = 88;
             light.intensity = 5; light.color = new Color(1f, .91f, .72f); light.shadows = LightShadows.Soft;
+            if (documentation) return;
             radioAlarm = cameraGO.AddComponent<AudioSource>(); radioAlarm.playOnAwake = false; radioAlarm.volume = .15f;
             const int sampleRate = 22050;
             var samples = new float[sampleRate / 2];
@@ -148,6 +149,18 @@ namespace SafeMining
             go.transform.localPosition = position; go.transform.localScale = scale;
             go.GetComponent<Renderer>().sharedMaterial = material; go.GetComponent<Collider>().enabled = false;
         }
+
+#if UNITY_EDITOR
+        // Reuse the exact runtime model builders without starting a session or creating UI/input.
+        public static void CreateDocumentationActors(Transform parent)
+        {
+            var host = new GameObject("Temporary documentation builder"); host.SetActive(false);
+            var builder = host.AddComponent<MiningSimulation>();
+            builder.BuildActor(true); builder.BuildHazards();
+            while (host.transform.childCount > 0) host.transform.GetChild(0).SetParent(parent, true);
+            DestroyImmediate(host);
+        }
+#endif
 
         void BuildHazards()
         {
@@ -401,6 +414,6 @@ namespace SafeMining
             }
             catch (Exception e) { ExportStatus = "Ekspor gagal: " + e.Message; Debug.LogWarning(ExportStatus); }
         }
-        void OnDestroy() { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+        void OnDestroy() { if (Application.isPlaying) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; } }
     }
 }

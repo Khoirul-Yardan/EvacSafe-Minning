@@ -6,6 +6,8 @@ Simulasi evakuasi tambang Unity dengan **Mode Cerita** dan **Mode FPP**, navigas
 2. Tekan **Play**, lalu pilih mode.
 3. FPP: **WASD + mouse** atau **gamepad**. **Esc** untuk jeda, **R** untuk ulang, **G** untuk kacamata.
 
+Untuk dokumentasi tanpa Play, pilih **EDITOR PREVIEW** di Hierarchy. Gunakan tombol Inspector untuk **seluruh map**, **kamera cerita**, **kamera FPP**, dan **ekspor PNG**. Pilihan tampilan juga tersedia di **SafeMining → Documentation**.
+
 [Panduan, skenario, kesesuaian abstrak, dan WebSocket](Documentation/SAFE_MINING.md)
 
 [Hasil pengujian gameplay](Documentation/Validation/final-gameplay.txt) · [Pengujian WebSocket](Documentation/Validation/websocket-and-gameplay.txt)
