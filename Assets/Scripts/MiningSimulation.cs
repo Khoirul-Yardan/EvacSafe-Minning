@@ -1,0 +1,406 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using Debug = UnityEngine.Debug;
+
+namespace SafeMining
+{
+    public enum MiningMode { Story, FirstPerson }
+    public enum SessionState { Menu, Running, Paused, Success, Blocked }
+
+    public class MiningSimulation : MonoBehaviour
+    {
+        public MiningMode Mode { get; private set; }
+        public SessionState State { get; private set; } = SessionState.Menu;
+        public bool Adaptive { get; private set; } = true;
+        public HashSet<Vector2Int> Cells { get; private set; }
+        public readonly HashSet<Vector2Int> Blocked = new HashSet<Vector2Int>();
+        public readonly int[] HazardLevels = new int[3]; // 0 normal, 1 warning, 2 closed
+        public List<Vector2Int> Route { get; private set; } = new List<Vector2Int>();
+        public int TargetExit { get; private set; } = -1;
+        public float Elapsed { get; private set; }
+        public float Travelled { get; private set; }
+        public float Exposure { get; private set; }
+        public int Reroutes { get; private set; }
+        public float ResponseMs { get; private set; }
+        public float MaxResponseMs { get; private set; }
+        public int HazardContacts { get; private set; }
+        public string Dialogue { get; private set; }
+        public string ExportStatus { get; private set; }
+        public Transform Actor { get; private set; }
+        public Camera ViewCamera { get; private set; }
+        public string Phase { get; private set; } = "Persiapan";
+        public bool GlassesEnabled { get; private set; } = true;
+        public float RouteDistance
+        {
+            get
+            {
+                if (Route.Count == 0) return 0;
+                float distance = Vector3.Distance(Flat(Actor.position), MineLayout.World(Route[0]));
+                for (int i = 1; i < Route.Count; i++) distance += Vector3.Distance(MineLayout.World(Route[i - 1]), MineLayout.World(Route[i]));
+                return distance;
+            }
+        }
+
+        CharacterController body;
+        Transform workerVisual, leftLeg, rightLeg, leftArm, rightArm;
+        readonly GameObject[] rubble = new GameObject[3];
+        readonly Light[] hazardLights = new Light[3];
+        readonly List<GameObject> arrows = new List<GameObject>();
+        Material arrowMaterial;
+        AudioSource radioAlarm;
+        MiningHUD hud;
+        MiningTelemetry telemetry;
+        float pitch, gravityVelocity, nextPlan;
+        int stage;
+        bool lastContact;
+        Vector2Int lastCell;
+        Vector3 previousPosition;
+        readonly List<string> eventRows = new List<string>();
+
+        void Awake()
+        {
+            Cells = MineLayout.CreateCells();
+            var environment = new GameObject("Environment Layer | Mine").transform; environment.SetParent(transform, false);
+            MineLayout.Build(environment, Cells);
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(.22f, .24f, .27f);
+            RenderSettings.fog = true; RenderSettings.fogColor = new Color(.045f, .055f, .06f);
+            RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = .017f;
+            BuildActor(); BuildHazards();
+            hud = gameObject.AddComponent<MiningHUD>(); hud.Simulation = this;
+            telemetry = GetComponent<MiningTelemetry>() ?? gameObject.AddComponent<MiningTelemetry>(); telemetry.Simulation = this;
+            arrowMaterial = MineLayout.Material("AR navigation green", new Color(.03f, 1f, .58f), true);
+            for (int i = 0; i < 28; i++)
+            {
+                var arrow = new GameObject("AR route chevron"); arrow.transform.SetParent(transform, false);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    var bar = MineLayout.Box(arrow.transform, "Chevron", new Vector3(side * .18f, 0, -.1f), new Vector3(.1f, .024f, .54f), arrowMaterial, false);
+                    bar.transform.localRotation = Quaternion.Euler(0, side * -42, 0);
+                }
+                arrow.SetActive(false); arrows.Add(arrow);
+            }
+            Dialogue = "Pilih mode untuk memulai latihan evakuasi.";
+            UpdateCamera(true);
+        }
+
+        void BuildActor()
+        {
+            Actor = new GameObject("Worker | Story + FPP").transform; Actor.SetParent(transform, false);
+            Actor.gameObject.layer = 2; // Exclude the worker's own capsule from camera obstruction probes.
+            Actor.position = MineLayout.World(MineLayout.Spawn) + Vector3.up * .05f;
+            body = Actor.gameObject.AddComponent<CharacterController>(); body.height = 1.8f; body.center = Vector3.up * .9f;
+            body.radius = .3f; body.stepOffset = .25f; body.skinWidth = .035f;
+            workerVisual = new GameObject("PPE worker model").transform; workerVisual.SetParent(Actor, false);
+            var orange = MineLayout.Material("Safety orange", new Color(.95f, .32f, .045f));
+            var dark = MineLayout.Material("Boots and gloves", new Color(.06f, .07f, .075f));
+            var yellow = MineLayout.Material("Helmet", new Color(1f, .72f, .06f));
+            var skin = MineLayout.Material("Skin", new Color(.57f, .34f, .21f));
+            var silver = MineLayout.Material("Reflective stripes", new Color(.75f, .84f, .8f));
+            var glass = MineLayout.Material("Safety glasses", new Color(.015f, .38f, .48f));
+            RoundedPart(workerVisual, "Suit torso", PrimitiveType.Capsule, new Vector3(0, 1.15f, 0), new Vector3(.49f, .32f, .31f), orange);
+            MineLayout.Box(workerVisual, "Reflective belt", new Vector3(0, .98f, 0), new Vector3(.51f, .075f, .31f), silver, false);
+            for (int side = -1; side <= 1; side += 2)
+                MineLayout.Box(workerVisual, "Reflective shoulder stripe", new Vector3(side * .16f, 1.24f, .151f), new Vector3(.045f, .3f, .025f), silver, false);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var leg = new GameObject("Leg pivot").transform; leg.SetParent(workerVisual, false); leg.localPosition = new Vector3(side * .14f, .9f, 0);
+                RoundedPart(leg, "Work trousers", PrimitiveType.Capsule, new Vector3(0, -.33f, 0), new Vector3(.22f, .36f, .25f), orange);
+                MineLayout.Box(leg, "Reflector", new Vector3(0, -.5f, 0), new Vector3(.23f, .06f, .26f), silver, false);
+                RoundedPart(leg, "Safety boot", PrimitiveType.Capsule, new Vector3(0, -.77f, .055f), new Vector3(.24f, .105f, .38f), dark);
+                var arm = new GameObject("Arm pivot").transform; arm.SetParent(workerVisual, false); arm.localPosition = new Vector3(side * .34f, 1.38f, 0);
+                RoundedPart(arm, "Sleeve", PrimitiveType.Capsule, new Vector3(0, -.2f, 0), new Vector3(.18f, .24f, .2f), orange);
+                RoundedPart(arm, "Glove", PrimitiveType.Sphere, new Vector3(0, -.45f, 0), new Vector3(.17f, .2f, .19f), dark);
+                if (side < 0) { leftLeg = leg; leftArm = arm; } else { rightLeg = leg; rightArm = arm; }
+            }
+            var head = GameObject.CreatePrimitive(PrimitiveType.Sphere); head.name = "Head"; head.transform.SetParent(workerVisual, false);
+            head.transform.localPosition = Vector3.up * 1.62f; head.transform.localScale = new Vector3(.32f, .36f, .31f);
+            head.GetComponent<Renderer>().sharedMaterial = skin; head.GetComponent<Collider>().enabled = false;
+            RoundedPart(workerVisual, "Hard hat", PrimitiveType.Sphere, new Vector3(0, 1.76f, 0), new Vector3(.39f, .27f, .38f), yellow);
+            RoundedPart(workerVisual, "Helmet brim", PrimitiveType.Sphere, new Vector3(0, 1.73f, .035f), new Vector3(.45f, .055f, .48f), yellow);
+            RoundedPart(workerVisual, "Helmet lamp", PrimitiveType.Sphere, new Vector3(0, 1.8f, .19f), new Vector3(.09f, .09f, .07f), silver);
+            MineLayout.Box(workerVisual, "AR safety glasses", new Vector3(0, 1.64f, .154f), new Vector3(.32f, .105f, .04f), glass, false);
+            MineLayout.Box(workerVisual, "Rescue backpack", new Vector3(0, 1.17f, -.24f), new Vector3(.37f, .47f, .22f), dark, false);
+            var cameraGO = new GameObject("Simulation camera", typeof(Camera), typeof(AudioListener)); cameraGO.transform.SetParent(transform, false);
+            ViewCamera = cameraGO.GetComponent<Camera>(); ViewCamera.nearClipPlane = .06f; ViewCamera.farClipPlane = 180; ViewCamera.fieldOfView = 72;
+            ViewCamera.clearFlags = CameraClearFlags.SolidColor; ViewCamera.backgroundColor = RenderSettings.fogColor;
+            var light = cameraGO.AddComponent<Light>(); light.type = LightType.Spot; light.range = 24; light.spotAngle = 88;
+            light.intensity = 5; light.color = new Color(1f, .91f, .72f); light.shadows = LightShadows.Soft;
+            radioAlarm = cameraGO.AddComponent<AudioSource>(); radioAlarm.playOnAwake = false; radioAlarm.volume = .15f;
+            const int sampleRate = 22050;
+            var samples = new float[sampleRate / 2];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float t = (float)i / sampleRate;
+                samples[i] = Mathf.Sin(t * Mathf.PI * 2 * (t < .25f ? 660 : 880)) * Mathf.Sin(t * Mathf.PI * 2);
+            }
+            radioAlarm.clip = AudioClip.Create("Local evacuation alert", samples.Length, 1, sampleRate, false); radioAlarm.clip.SetData(samples, 0);
+        }
+
+        static void RoundedPart(Transform parent, string name, PrimitiveType type, Vector3 position, Vector3 scale, Material material)
+        {
+            var go = GameObject.CreatePrimitive(type); go.name = name; go.transform.SetParent(parent, false);
+            go.transform.localPosition = position; go.transform.localScale = scale;
+            go.GetComponent<Renderer>().sharedMaterial = material; go.GetComponent<Collider>().enabled = false;
+        }
+
+        void BuildHazards()
+        {
+            var material = MineLayout.Material("Fallen shale", new Color(.28f, .24f, .21f));
+            var warning = MineLayout.Material("Red hazard beacon", new Color(1, .06f, .015f), true);
+            for (int i = 0; i < rubble.Length; i++)
+            {
+                var root = new GameObject("Landslide " + (i + 1)); root.transform.SetParent(transform, false); root.transform.position = MineLayout.World(MineLayout.HazardCells[i]);
+                for (int j = 0; j < 22; j++)
+                {
+                    var rock = GameObject.CreatePrimitive(PrimitiveType.Sphere); rock.transform.SetParent(root.transform, false);
+                    float x = (j % 5 - 2) * 1.05f, z = (j / 5 - 2) * .75f;
+                    rock.transform.localPosition = new Vector3(x, .35f + (1 - Mathf.Abs(x) / 3) * (j % 3) * .38f, z);
+                    rock.transform.localScale = new Vector3(1.15f, .9f + j % 3 * .2f, 1.2f);
+                    rock.transform.localRotation = Quaternion.Euler(j * 33, j * 17, j * 49); rock.GetComponent<Renderer>().sharedMaterial = material;
+                    var shard = Instantiate(rock.GetComponent<MeshFilter>().sharedMesh);
+                    Vector3[] vertices = shard.vertices;
+                    for (int v = 0; v < vertices.Length; v++)
+                        vertices[v] *= .76f + Mathf.PerlinNoise(vertices[v].x * 7 + 40 + j, vertices[v].y * 7 + vertices[v].z * 3 + 40) * .55f;
+                    shard.vertices = vertices; shard.RecalculateNormals(); rock.GetComponent<MeshFilter>().sharedMesh = shard;
+                }
+                // The barrier spans the full tunnel; the trigger shell is also used for exposure feedback.
+                var barrier = root.AddComponent<BoxCollider>(); barrier.center = new Vector3(0, 2, 0); barrier.size = new Vector3(6, 4, 5.8f);
+                root.AddComponent<MiningRockfall>(); rubble[i] = root; root.SetActive(false);
+                var beacon = MineLayout.Box(transform, "Hazard beacon", MineLayout.World(MineLayout.HazardCells[i]) + new Vector3(0, 3.5f, 0), new Vector3(.3f, .3f, .3f), warning, false);
+                hazardLights[i] = beacon.AddComponent<Light>(); hazardLights[i].range = 13; hazardLights[i].intensity = 4;
+                beacon.SetActive(false);
+            }
+        }
+
+        public void Begin(MiningMode mode, bool adaptive)
+        {
+            Mode = mode; Adaptive = adaptive; State = SessionState.Running;
+            Elapsed = Travelled = Exposure = ResponseMs = MaxResponseMs = 0; Reroutes = HazardContacts = 0;
+            stage = 0; pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
+            Blocked.Clear(); eventRows.Clear(); ExportStatus = "";
+            for (int i = 0; i < 3; i++) { HazardLevels[i] = 0; rubble[i].SetActive(false); hazardLights[i].gameObject.SetActive(false); }
+            body.enabled = false; Actor.position = MineLayout.World(MineLayout.Spawn) + Vector3.up * .04f; Actor.rotation = Quaternion.identity; body.enabled = true;
+            previousPosition = Actor.position; lastCell = MineLayout.Cell(Actor.position);
+            workerVisual.gameObject.SetActive(mode == MiningMode.Story);
+            Phase = "01 / Briefing";
+            Dialogue = "Tim: Kita berada di galeri produksi. Ikuti petunjuk evakuasi menuju zona aman. Perhatikan perubahan kondisi lorong.";
+            Plan(false); LogEvent("start", mode + "/" + (adaptive ? "adaptive" : "static")); SetCursor(); UpdateCamera(true);
+        }
+
+        public void TogglePause()
+        {
+            if (State == SessionState.Running) State = SessionState.Paused;
+            else if (State == SessionState.Paused) State = SessionState.Running;
+            SetCursor();
+        }
+        public void Menu() { State = SessionState.Menu; SetCursor(); }
+        void SetCursor() { bool capture = State == SessionState.Running && Mode == MiningMode.FirstPerson; Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None; Cursor.visible = !capture; }
+
+        void Update()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
+                if (keyboard.rKey.wasPressedThisFrame && State != SessionState.Menu) Begin(Mode, Adaptive);
+                if (keyboard.tabKey.wasPressedThisFrame && State != SessionState.Menu) Begin(Mode == MiningMode.Story ? MiningMode.FirstPerson : MiningMode.Story, Adaptive);
+                if (keyboard.gKey.wasPressedThisFrame) GlassesEnabled = !GlassesEnabled;
+            }
+            if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
+            float dt = Mathf.Min(Time.deltaTime, .05f);
+            Elapsed += dt;
+            RunTimeline();
+            if (Mode == MiningMode.Story) MoveStory(dt); else MovePlayer(dt);
+            if (body.isGrounded) gravityVelocity = -2; else gravityVelocity -= 20 * dt;
+            body.Move(Vector3.up * (gravityVelocity * dt));
+            Travelled += Vector3.Distance(Flat(previousPosition), Flat(Actor.position)); previousPosition = Actor.position;
+            CheckExposure(dt);
+            Vector2Int cell = MineLayout.Cell(Actor.position);
+            if (Adaptive && Mode == MiningMode.FirstPerson && (cell != lastCell || Elapsed >= nextPlan))
+            { Plan(false); nextPlan = Elapsed + .5f; lastCell = cell; }
+            TrimRoute();
+            for (int i = 0; i < MineLayout.Exits.Length; i++)
+                if (Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.Exits[i])) < 1.8f)
+                {
+                    TargetExit = i; State = SessionState.Success; Phase = "05 / Evakuasi selesai";
+                    Dialogue = "Tim: Kita sudah berada di zona aman. Lakukan pendataan anggota dan tunggu arahan petugas.";
+                    LogEvent("success", "refuge_" + (i + 1)); SetCursor(); break;
+                }
+            UpdateCamera(false); UpdateArrows();
+            if (Actor.position.y < -3) { State = SessionState.Blocked; Dialogue = "Posisi di luar map. Tekan R untuk mengulang."; SetCursor(); }
+        }
+
+        void RunTimeline()
+        {
+            if (stage == 0 && Elapsed >= 6) { stage++; SetHazard(0, 1); Phase = "02 / Peringatan"; Dialogue = "Tim: Ada getaran dan debu di galeri pusat. Waspadai potensi longsor. Kacamata menerima pembaruan kondisi lorong."; }
+            if (stage == 1 && Elapsed >= 10) { stage++; SetHazard(0, 2); Phase = "03 / Longsor utama"; Dialogue = "Tim: Longsor menutup galeri pusat! Jalur merah tidak dapat dilewati. Periksa petunjuk baru menuju zona aman."; }
+            if (stage == 2 && Elapsed >= 19) { stage++; SetHazard(1, 1); Dialogue = "Tim: Penyangga galeri barat mulai tidak stabil. Bersiap memilih jalur penghubung ke timur."; }
+            if (stage == 3 && Elapsed >= 23) { stage++; SetHazard(1, 2); Phase = "04 / Evakuasi adaptif"; Dialogue = "Tim: Galeri barat juga tertutup. Jalur timur masih tersedia. Ikuti arah hijau dan hindari area merah."; }
+        }
+
+        public void SetHazard(int index, int level)
+        {
+            if (index < 0 || index >= HazardLevels.Length || level < 0 || level > 2 || HazardLevels[index] == level) return;
+            HazardLevels[index] = level;
+            if (level == 2) Blocked.Add(MineLayout.HazardCells[index]); else Blocked.Remove(MineLayout.HazardCells[index]);
+            rubble[index].SetActive(level == 2); hazardLights[index].gameObject.SetActive(level > 0);
+            hazardLights[index].color = level == 1 ? new Color(1, .55f, .03f) : Color.red;
+            if (radioAlarm != null) radioAlarm.Play();
+            LogEvent("hazard", index + ":" + level);
+            if (Adaptive) Plan(true);
+            if (level == 2 && MineLayout.Cell(Actor.position) == MineLayout.HazardCells[index])
+            {
+                HazardContacts++; State = SessionState.Blocked; Phase = "Terpapar longsor";
+                Dialogue = "Longsor terjadi di posisi Anda. Sesi dihentikan. Ulangi latihan dan hindari lorong yang sudah diberi peringatan.";
+                LogEvent("blocked", "landslide_at_player"); SetCursor();
+            }
+        }
+
+        void Plan(bool hazardChange)
+        {
+            var watch = Stopwatch.StartNew();
+            var start = MineLayout.Cell(Actor.position);
+            var newPath = MineLayout.FindPath(Cells, start, Adaptive ? Blocked : new HashSet<Vector2Int>(), out int exit);
+            bool changed = TargetExit != exit;
+            if (!changed && hazardChange)
+            {
+                foreach (var p in Route) if (Blocked.Contains(p)) { changed = true; break; }
+            }
+            if (hazardChange && changed) Reroutes++;
+            Route = newPath; TargetExit = exit;
+            if (Route.Count > 1)
+            {
+                Vector3 heading = (MineLayout.World(Route[1]) - MineLayout.World(Route[0])).normalized;
+                Vector3 offset = Flat(Actor.position) - MineLayout.World(Route[0]);
+                float progress = Vector3.Dot(offset, heading);
+                if (progress > 0 && (offset - heading * progress).magnitude < 1.5f) Route.RemoveAt(0);
+            }
+            // Start at the current cell centre; skipping it can cut diagonally through a junction wall.
+            TrimRoute(); watch.Stop(); ResponseMs = (float)watch.Elapsed.TotalMilliseconds;
+            if (hazardChange) { MaxResponseMs = Mathf.Max(MaxResponseMs, ResponseMs); LogEvent("route_update", "exit_" + exit); }
+            if (Route.Count == 0) Dialogue = "Tidak ada rute aman dari posisi ini. Mundur dari zona bahaya dan tunggu pembaruan; jangan ikuti arah merah.";
+        }
+
+        void TrimRoute()
+        {
+            while (Route.Count > 1 && Vector3.Distance(Flat(Actor.position), MineLayout.World(Route[0])) < .4f) Route.RemoveAt(0);
+        }
+
+        void MoveStory(float dt)
+        {
+            if (Elapsed < 4 || Route.Count == 0) return;
+            Vector3 delta = MineLayout.World(Route[0]) - Flat(Actor.position);
+            if (Blocked.Contains(Route[0]) && delta.magnitude < 4.2f)
+            {
+                State = SessionState.Blocked; Phase = "Baseline terhalang";
+                Dialogue = "Rute statis terhalang longsor. Sesi berhenti tanpa menerobos bahaya. Bandingkan dengan navigasi adaptif pada skenario yang sama.";
+                LogEvent("blocked", "static_route"); SetCursor(); return;
+            }
+            if (delta.sqrMagnitude > .01f)
+            {
+                Actor.rotation = Quaternion.Slerp(Actor.rotation, Quaternion.LookRotation(delta), dt * 8);
+                body.Move(delta.normalized * Mathf.Min(delta.magnitude, 2.8f * dt));
+                float swing = Mathf.Sin(Elapsed * 8) * 25;
+                leftLeg.localRotation = Quaternion.Euler(swing, 0, 0); rightLeg.localRotation = Quaternion.Euler(-swing, 0, 0);
+                leftArm.localRotation = Quaternion.Euler(-swing * .7f, 0, 0); rightArm.localRotation = Quaternion.Euler(swing * .7f, 0, 0);
+            }
+        }
+
+        void MovePlayer(float dt)
+        {
+            Vector2 look = Mouse.current != null && Cursor.lockState == CursorLockMode.Locked ? Mouse.current.delta.ReadValue() * .09f : Vector2.zero;
+            if (Gamepad.current != null) look += Gamepad.current.rightStick.ReadValue() * (110 * dt);
+            Actor.Rotate(0, look.x, 0); pitch = Mathf.Clamp(pitch - look.y, -70, 70);
+            Vector2 input = Gamepad.current != null ? Gamepad.current.leftStick.ReadValue() : Vector2.zero;
+            var k = Keyboard.current;
+            if (k != null) { input.x += (k.dKey.isPressed ? 1 : 0) - (k.aKey.isPressed ? 1 : 0); input.y += (k.wKey.isPressed ? 1 : 0) - (k.sKey.isPressed ? 1 : 0); }
+            input = Vector2.ClampMagnitude(input, 1);
+            float speed = k != null && k.leftShiftKey.isPressed ? 4.8f : 3.1f;
+            body.Move((Actor.right * input.x + Actor.forward * input.y) * (speed * dt));
+        }
+
+        void CheckExposure(float dt)
+        {
+            bool near = false;
+            for (int i = 0; i < 3; i++)
+                if (HazardLevels[i] == 2 && Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.HazardCells[i])) < 4.5f) near = true;
+            if (near) { Exposure += dt; if (!lastContact) { HazardContacts++; LogEvent("hazard_contact", "warning_perimeter"); } }
+            lastContact = near;
+        }
+        public float NearestHazardDistance()
+        {
+            float d = float.PositiveInfinity;
+            for (int i = 0; i < 3; i++) if (HazardLevels[i] > 0) d = Mathf.Min(d, Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.HazardCells[i])));
+            return d;
+        }
+
+        void UpdateCamera(bool snap)
+        {
+            if (ViewCamera == null) return;
+            Vector3 eye = Actor.position + Vector3.up * 1.65f;
+            if (Mode == MiningMode.FirstPerson && State != SessionState.Menu)
+            { ViewCamera.transform.SetPositionAndRotation(eye, Actor.rotation * Quaternion.Euler(pitch, 0, 0)); return; }
+            Vector3 desired = Actor.position - Actor.forward * 3.1f + Vector3.up * 2.65f;
+            Vector3 direction = desired - eye;
+            if (Physics.SphereCast(eye, .16f, direction.normalized, out RaycastHit hit, direction.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                desired = eye + direction.normalized * Mathf.Max(.25f, hit.distance - .15f);
+            ViewCamera.transform.position = snap ? desired : Vector3.Lerp(ViewCamera.transform.position, desired, Time.deltaTime * 10);
+            ViewCamera.transform.LookAt(eye + Actor.forward * 3);
+        }
+
+        void UpdateArrows()
+        {
+            foreach (var arrow in arrows) arrow.SetActive(false);
+            if (State != SessionState.Running || (Mode == MiningMode.FirstPerson && !GlassesEnabled) || Route.Count == 0) return;
+            Vector3 from = Flat(Actor.position); int count = 0;
+            foreach (var cell in Route)
+            {
+                if (Blocked.Contains(cell)) break; // Never label a known landslide as safe, even in baseline.
+                Vector3 to = MineLayout.World(cell), delta = to - from; float length = delta.magnitude;
+                // A manual baseline detour must not produce an AR line through a rock wall.
+                bool obstructed = length > .1f && Physics.Raycast(from + Vector3.up, delta.normalized, length, ~0, QueryTriggerInteraction.Ignore);
+                if (length > .1f && !obstructed)
+                    for (float d = 1.3f; d < length && count < arrows.Count; d += 2)
+                    {
+                        var arrow = arrows[count++]; arrow.SetActive(true); arrow.transform.position = from + delta.normalized * d + Vector3.up * .09f;
+                        arrow.transform.rotation = Quaternion.LookRotation(delta);
+                    }
+                from = to; if (count >= arrows.Count) break;
+            }
+        }
+
+        public string DirectionHint()
+        {
+            if (Route.Count == 0) return "TIDAK ADA RUTE AMAN";
+            if (Blocked.Contains(Route[0])) return "RUTE TERHALANG - BERHENTI";
+            Vector3 d = MineLayout.World(Route[0]) - Flat(Actor.position);
+            float angle = Vector3.SignedAngle(Actor.forward, d, Vector3.up);
+            return Mathf.Abs(angle) > 140 ? "PUTAR BALIK" : Mathf.Abs(angle) < 25 ? "LURUS" : angle > 0 ? "BELOK KANAN" : "BELOK KIRI";
+        }
+        static Vector3 Flat(Vector3 p) => new Vector3(p.x, 0, p.z);
+        void LogEvent(string type, string detail)
+        {
+            eventRows.Add(string.Join(",", Elapsed.ToString("F3", CultureInfo.InvariantCulture), type, detail, Reroutes.ToString(), ResponseMs.ToString("F4", CultureInfo.InvariantCulture)));
+        }
+        public void Export()
+        {
+            try
+            {
+                string directory = Path.Combine(Application.persistentDataPath, "Evaluasi"); Directory.CreateDirectory(directory);
+                string prefix = Path.Combine(directory, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_" + Mode + "_" + (Adaptive ? "adaptive" : "static"));
+                File.WriteAllText(prefix + "_events.csv", "simulation_time_s,event,detail,reroutes,planning_ms\n" + string.Join("\n", eventRows));
+                File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms\n" +
+                    string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs));
+                ExportStatus = "CSV tersimpan: " + directory; Debug.Log(ExportStatus);
+            }
+            catch (Exception e) { ExportStatus = "Ekspor gagal: " + e.Message; Debug.LogWarning(ExportStatus); }
+        }
+        void OnDestroy() { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+    }
+}

@@ -1,0 +1,9 @@
+PASS graph: 524 origin/hazard combinations; blocked-route failure is safe.
+PASS geometry: 67 floor/roof cells, 152 open connections (3 lanes each), 116 sealed boundaries.
+PASS adaptive story: success, 2 reroutes, 45.7 s, exposure 0
+PASS static baseline: stops before landslide, zero reroutes.
+PASS FPP: routes from player position, pause/resume, refuge completion.
+PASS CSV export and independent session reset.
+PASS FPP collision: manual capsule cannot cross exterior wall.
+PASS WebSocket: real Unity snapshot sent and hazard command received/applied on main thread.
+All checks passed
