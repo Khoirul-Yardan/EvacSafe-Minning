@@ -24,7 +24,9 @@ namespace SafeMining
         [Serializable] public class Snapshot
         {
             public string type = "telemetry";
-            public string mode, navigation, state;
+            public string mode, navigation, state, scenario;
+            public int seed;
+            public Vector2Int[] detectorCells;
             public float simulationTime, x, z, exposureSeconds, planningMs;
             public int reroutes;
             public int[] hazardLevels;
@@ -69,7 +71,7 @@ namespace SafeMining
             if (socket == null || socket.State != WebSocketState.Open || Simulation == null || Simulation.Actor == null || Time.unscaledTime < nextSend || (pendingSend != null && !pendingSend.IsCompleted)) return;
             nextSend = Time.unscaledTime + .5f;
             var s = Simulation;
-            var snapshot = new Snapshot { mode = s.Mode.ToString(), navigation = s.Adaptive ? "adaptive" : "static", state = s.State.ToString(), simulationTime = s.Elapsed,
+            var snapshot = new Snapshot { seed = s.ActiveSeed, scenario = s.ActiveScenario.ToString(), detectorCells = s.HazardSites.ToArray(), mode = s.Mode.ToString(), navigation = s.Adaptive ? "adaptive" : "static", state = s.State.ToString(), simulationTime = s.Elapsed,
                 x = s.Actor.position.x, z = s.Actor.position.z, exposureSeconds = s.Exposure, planningMs = s.ResponseMs, reroutes = s.Reroutes, hazardLevels = s.HazardLevels };
             byte[] data = Encoding.UTF8.GetBytes(JsonUtility.ToJson(snapshot));
             pendingSend = socket.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Text, true, cancellation.Token);

@@ -29,7 +29,8 @@ public static class MiningDocumentationPreview
     static void Ensure(Scene scene)
     {
         if (!scene.isLoaded || scene.path != MiningExperienceBuilder.ScenePath || EditorApplication.isPlayingOrWillChangePlaymode) return;
-        if (Find(scene) != null) return;
+        var existing = Find(scene);
+        if (existing != null && existing.GetComponentsInChildren<MiningLandslideDetector>(true).Length > 0) return;
         bool wasDirty = scene.isDirty;
         var preview = Generate(scene);
         // Do not silently save unrelated unsaved edits in an already-open scene.
@@ -74,10 +75,10 @@ public static class MiningDocumentationPreview
         var environment = new GameObject("01 Environment | same map as Play").transform; environment.SetParent(root.transform, false);
         MineLayout.Build(environment, cells);
         var actors = new GameObject("02 Worker, landslides, cameras").transform; actors.SetParent(root.transform, false);
-        MiningSimulation.CreateDocumentationActors(actors);
+        MiningSimulation.CreateDocumentationActors(actors, cells);
         preview.worker = actors.Find("Worker | Story + FPP").gameObject;
-        preview.landslides = new GameObject[3];
-        for (int i = 0; i < 3; i++) preview.landslides[i] = actors.Find("Landslide " + (i + 1)).gameObject;
+        preview.landslides = new GameObject[MiningHazardScenario.DetectorSites(cells).Count];
+        for (int i = 0; i < preview.landslides.Length; i++) preview.landslides[i] = actors.Find("Landslide " + (i + 1)).gameObject;
 
         // Split the existing shell for documentation only; gameplay keeps its original closed shell.
         var shell = environment.GetComponentInChildren<MeshFilter>(true);
@@ -149,7 +150,12 @@ public static class MiningDocumentationPreview
         {
             // The built-in font owns a dynamic atlas; let Unity reconstruct it after reopening.
             var text = renderer.GetComponent<TextMesh>();
-            if (text != null) { renderer.sharedMaterial = text.font.material; continue; }
+            if (text != null)
+            {
+                if (text.GetComponentInParent<MiningLandslideDetector>() == null) renderer.sharedMaterial = text.font.material;
+                else Save(renderer.sharedMaterial);
+                continue;
+            }
             foreach (var material in renderer.sharedMaterials)
             {
                 if (material == null) continue;
@@ -233,7 +239,8 @@ public class MiningEditorPreviewInspector : Editor
             bool next = EditorGUILayout.Toggle("Tampilkan contoh longsor", show);
             if (show != next)
             {
-                foreach (var landslide in preview.landslides) { Undo.RecordObject(landslide, "Documentation landslides"); landslide.SetActive(next); }
+                for (int i = 0; i < preview.landslides.Length; i++) { Undo.RecordObject(preview.landslides[i], "Documentation landslides"); preview.landslides[i].SetActive(next && i == 0); }
+                foreach (var detector in preview.GetComponentsInChildren<MiningLandslideDetector>(true)) detector.SetLevel(next && detector.StationIndex == 0 ? 2 : 0);
                 EditorSceneManager.MarkSceneDirty(preview.gameObject.scene);
             }
             preview.showLabels = EditorGUILayout.Toggle("Label titik penting (Gizmos)", preview.showLabels);
@@ -246,6 +253,6 @@ public class MiningEditorPreviewInspector : Editor
         var style = new GUIStyle(EditorStyles.boldLabel); style.normal.textColor = Color.white;
         Handles.Label(MineLayout.World(MineLayout.Spawn) + Vector3.up * 2, "MULAI / PEKERJA", style);
         for (int i = 0; i < MineLayout.Exits.Length; i++) Handles.Label(MineLayout.World(MineLayout.Exits[i]) + Vector3.up * 5, "ZONA AMAN " + (i + 1), style);
-        for (int i = 0; i < MineLayout.HazardCells.Length; i++) Handles.Label(MineLayout.World(MineLayout.HazardCells[i]) + Vector3.up * 5, "POTENSI LONGSOR " + (i + 1), style);
+        foreach (var detector in preview.GetComponentsInChildren<MiningLandslideDetector>(true)) Handles.Label(MineLayout.World(detector.Cell) + Vector3.up * 5, "DETEKTOR D" + (detector.StationIndex + 1).ToString("00"), style);
     }
 }

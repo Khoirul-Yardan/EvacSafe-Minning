@@ -14,7 +14,7 @@ namespace SafeMining
         readonly Color panel = new Color(.025f, .062f, .086f, .94f);
         Font font;
         Transform canvas, menu, hud, modal, glasses;
-        Text phase, mode, dialogue, direction, distance, metrics, hazard, timer, modalTitle, modalBody, exportStatus, navButtonLabel;
+        Text phase, mode, dialogue, direction, distance, metrics, hazard, timer, modalTitle, modalBody, exportStatus, navButtonLabel, scenarioLabel, detectorStatus;
         bool adaptive = true;
         Image dangerWash;
         MineMapGraphic map;
@@ -65,13 +65,17 @@ namespace SafeMining
             var story = Card(menu, "Story card", new Vector2(.5f, .5f), new Vector2(0, -18), new Vector2(700, 325));
             Label(story, "Number", "01  /  PELAJARI SKENARIO", new Vector2(0, 119), new Vector2(466, 30), 17, cyan);
             Label(story, "Heading", "Mode Cerita", new Vector2(0, 63), new Vector2(466, 60), 37, Color.white);
-            Label(story, "Body", "Ikuti pekerja tambang menjalani evakuasi otomatis. Amati peringatan, longsor, dan perubahan rute melalui dialog tim.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
+            Label(story, "Body", "Ikuti pekerja tambang menjalani evakuasi otomatis. Amati detektor di dinding, lampu peringatan, longsor acak, dan perubahan rute menuju zona aman.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
             Button(story, "Mulai Mode Cerita  >", new Vector2(0, -112), new Vector2(466, 56), () => Simulation.Begin(MiningMode.Story, adaptive), true);
             var navigation = Button(menu, "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS", new Vector2(0, -237), new Vector2(1100, 52), () =>
             { adaptive = !adaptive; navButtonLabel.text = adaptive ? "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS" : "Navigasi: STATIS / BASELINE  |  jalur awal tetap"; });
             navButtonLabel = navigation.GetComponentInChildren<Text>();
-            Label(menu, "Controls", "Pekerja bergerak otomatis     Esc: jeda / lanjut     R: ulangi sesi", new Vector2(0, -309), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
-            Label(menu, "Research", "Simulasi penelitian berdasarkan abstrak SAFE-MINING EVAC  |  kondisi dan sensor dimodelkan secara virtual", new Vector2(0, -370), new Vector2(1300, 30), 16, muted, TextAnchor.MiddleCenter);
+            Button(menu, "Acak skenario baru", new Vector2(-282, -302), new Vector2(536, 48), () => Simulation.NewRandomScenario());
+            Button(menu, "Jenis: Acak / Tetap / Tanpa bahaya", new Vector2(282, -302), new Vector2(536, 48), () =>
+                Simulation.scenarioMode = (HazardScenarioMode)(((int)Simulation.scenarioMode + 1) % 3));
+            scenarioLabel = Label(menu, "Scenario seed", "", new Vector2(0, -352), new Vector2(1100, 30), 17, cyan, TextAnchor.MiddleCenter);
+            Label(menu, "Controls", "Pekerja bergerak otomatis     Esc: jeda / lanjut     R: ulangi sesi", new Vector2(0, -394), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
+            Label(menu, "Research", "Simulasi penelitian berdasarkan abstrak SAFE-MINING EVAC  |  kondisi dan sensor dimodelkan secara virtual", new Vector2(0, -429), new Vector2(1300, 30), 16, muted, TextAnchor.MiddleCenter);
         }
         void BuildHUD()
         {
@@ -94,6 +98,8 @@ namespace SafeMining
             Label(guide, "AR label", "SAFETY GLASSES / NAVIGASI", new Vector2(0, 40), new Vector2(320, 25), 15, cyan, TextAnchor.MiddleCenter);
             direction = Label(guide, "Direction", "", new Vector2(0, 0), new Vector2(330, 43), 27, green, TextAnchor.MiddleCenter);
             distance = Label(guide, "Distance", "", new Vector2(0, -41), new Vector2(330, 26), 17, muted, TextAnchor.MiddleCenter);
+            var sensors = Card(hud, "Detector network", new Vector2(0, 1), new Vector2(298, -191), new Vector2(540, 90));
+            detectorStatus = Label(sensors, "Sensor status", "", Vector2.zero, new Vector2(500, 74), 18, cyan);
             hazard = Label(hud, "Hazard alert", "", new Vector2(0, 255), new Vector2(720, 55), 24, new Color(1, .45f, .3f), TextAnchor.MiddleCenter);
             Label(hud, "Control hints", "ESC  Jeda / lanjut     R  Ulangi Mode Cerita", new Vector2(0, -426), new Vector2(1000, 26), 15, muted, TextAnchor.MiddleCenter);
             Button(banner, "II", new Vector2(237, 30), new Vector2(36, 34), () => Simulation.TogglePause());
@@ -128,11 +134,13 @@ namespace SafeMining
             bool showResult = s.State == SessionState.Paused || s.State == SessionState.Success || s.State == SessionState.Blocked;
             modal.gameObject.SetActive(showResult);
             mode.text = "SAFE-MINING EVAC  /  " + (s.Mode == MiningMode.Story ? "MODE CERITA" : "MODE FPP");
+            scenarioLabel.text = "Skenario: " + s.scenarioMode + "  |  Seed " + s.scenarioSeed + "  |  R dan ulang memakai seed yang sama";
+            detectorStatus.text = "JARINGAN DETEKTOR  /  " + s.Detectors.Length + " titik\n" + s.LastDetectorAlert;
             phase.text = s.Phase;
             dialogue.text = s.Dialogue;
             bool hasGlasses = s.Mode == MiningMode.Story || s.GlassesEnabled;
             direction.text = hasGlasses ? s.DirectionHint() : "KACAMATA NONAKTIF";
-            distance.text = hasGlasses && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + "  /  " + s.RouteDistance.ToString("F0") + " m sepanjang rute" : "Tekan G untuk kacamata";
+            distance.text = hasGlasses && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + "  /  " + s.RouteDistance.ToString("F0") + " m sepanjang rute" : "Menunggu rute menuju zona aman";
             timer.text = s.Elapsed.ToString("F1") + " s";
             metrics.text = (s.Adaptive ? "ADAPTIF" : "STATIS / BASELINE") + "  |  " + s.Reroutes + " perubahan\nRespons hitung " + s.ResponseMs.ToString("F2") + " ms";
             float danger = s.NearestHazardDistance();
@@ -144,7 +152,7 @@ namespace SafeMining
             {
                 modalTitle.text = s.State == SessionState.Success ? "EVAKUASI BERHASIL" : s.State == SessionState.Paused ? "SIMULASI DIJEDA" : "RUTE TERHALANG";
                 modalBody.text = (s.Mode == MiningMode.Story ? "Mode Cerita" : "Mode FPP") + "  /  " + (s.Adaptive ? "Navigasi adaptif" : "Baseline statis") +
-                    "\n\nWaktu simulasi       " + s.Elapsed.ToString("F1") + " detik" +
+                    "  |  Seed " + s.ActiveSeed + "\n\nWaktu simulasi       " + s.Elapsed.ToString("F1") + " detik" +
                     "\nJarak tempuh          " + s.Travelled.ToString("F1") + " m" +
                     "\nPaparan bahaya       " + s.Exposure.ToString("F1") + " detik / " + s.HazardContacts + " kontak" +
                     "\nPerubahan rute        " + s.Reroutes + " kali" +
@@ -175,8 +183,9 @@ namespace SafeMining
             foreach (var cell in Simulation.Cells) Rect(vh, Origin(cell), new Vector2(scale * .93f, scale * .93f), new Color(.16f, .27f, .31f));
             if (Simulation.GlassesEnabled || Simulation.Mode == MiningMode.Story)
                 foreach (var cell in Simulation.Route) Rect(vh, Origin(cell), Vector2.one * (scale * .45f), new Color(.05f, .85f, .58f));
-            for (int i = 0; i < MineLayout.HazardCells.Length; i++)
-                if (Simulation.HazardLevels[i] > 0) Rect(vh, Origin(MineLayout.HazardCells[i]), Vector2.one * scale * .9f, Simulation.HazardLevels[i] == 2 ? new Color(1, .18f, .12f) : new Color(1, .65f, .08f));
+            foreach (var site in Simulation.HazardSites) Rect(vh, Origin(site), Vector2.one * scale * .35f, new Color(.25f, .75f, 1));
+            for (int i = 0; i < Simulation.HazardSites.Count; i++)
+                if (Simulation.HazardLevels[i] > 0) Rect(vh, Origin(Simulation.HazardSites[i]), Vector2.one * scale * .9f, Simulation.HazardLevels[i] == 2 ? new Color(1, .18f, .12f) : new Color(1, .65f, .08f));
             foreach (var exit in MineLayout.Exits) Rect(vh, Origin(exit), Vector2.one * scale * .85f, new Color(.3f, 1, .67f));
             if (Simulation.Actor == null) return;
             Vector3 p = Simulation.Actor.position;

@@ -1,5 +1,7 @@
 # Update simulasi dan penjelasan research problem
 
+**Arsip tahap sebelumnya.** Implementasi terbaru memakai longsor acak, detektor virtual, dan biaya risiko. Lihat [audit full paper dan update terbaru](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md). Hasil/fitur dalam dokumen ini menggambarkan versi sebelum penambahan tersebut.
+
 Tanggal: 23 September 2026. Acuan pemeriksaan: kode scene `SafeMining_Experience.unity`, generator, planner, UI, dan runner validasi dalam repositori ini. Rumusan penelitian di bawah merupakan rumusan operasional berdasarkan implementasi, bukan kutipan verbatim abstrak.
 
 ## Kesimpulan audit tunnel

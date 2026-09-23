@@ -63,13 +63,16 @@ public static class MiningExperienceValidation
     static double deadline;
     static MiningSimulation simulation;
     static bool storyCaptured;
+    static int randomRun, randomSuccess, randomBlocked;
+    static string pairedSchedule;
     static int lastPhaseFrame;
     static readonly List<string> results = new List<string>();
     public static void Run()
     {
         try
         {
-            ValidateGraph(); MiningExperienceBuilder.CreateScene();
+            MiningDetectorAssetBuilder.Ensure();
+            ValidateGraph(); ValidateRandomScenarios(); MiningExperienceBuilder.CreateScene();
             EditorSceneManager.OpenScene(MiningExperienceBuilder.ScenePath);
             EditorApplication.playModeStateChanged += OnPlay;
             deadline = EditorApplication.timeSinceStartup + 240;
@@ -129,6 +132,41 @@ public static class MiningExperienceValidation
         if (state != PlayModeStateChange.EnteredPlayMode) return;
         // Static fields are reset on domain reload; use SessionState to restore in Tick registration.
     }
+    static string ScheduleKey(List<ScheduledRockfall> schedule)
+    {
+        var values = new List<string>();
+        foreach (var item in schedule) values.Add(item.detectorIndex + ":" + item.warningTime.ToString("R") + ":" + item.collapseTime.ToString("R"));
+        return string.Join("|", values);
+    }
+    static void ValidateRandomScenarios()
+    {
+        var cells = MineLayout.CreateCells(); var sites = MiningHazardScenario.DetectorSites(cells);
+        Assert(sites.Count > 3, "Detector coverage was not expanded");
+        var diversity = new HashSet<string>(); var firstLocations = new HashSet<int>();
+        for (int seed = 1; seed <= 64; seed++)
+        {
+            var a = MiningHazardScenario.Create(cells, sites, HazardScenarioMode.Random, seed, 3, 6, 6, 4);
+            var b = MiningHazardScenario.Create(cells, sites, HazardScenarioMode.Random, seed, 3, 6, 6, 4);
+            Assert(ScheduleKey(a) == ScheduleKey(b), "Seed replay differs");
+            diversity.Add(ScheduleKey(a)); firstLocations.Add(a[0].detectorIndex);
+            var used = new HashSet<int>(); float previous = -1;
+            foreach (var item in a)
+            {
+                Assert(used.Add(item.detectorIndex), "Duplicate collapse station");
+                Assert(cells.Contains(sites[item.detectorIndex]), "Hazard outside mine");
+                Assert(item.warningTime > previous && item.collapseTime - item.warningTime >= 3.999f, "Missing warning lead time");
+                Assert(sites[item.detectorIndex] != MineLayout.Spawn && Array.IndexOf(MineLayout.Exits, sites[item.detectorIndex]) < 0, "Hazard at protected location");
+                previous = item.collapseTime;
+            }
+        }
+        Assert(diversity.Count > 1 && firstLocations.Count > 1, "Random seed did not vary locations/times");
+        var risk = new Dictionary<Vector2Int, float> { [MineLayout.HazardCells[0]] = 100 };
+        var path = MineLayout.FindRiskAwarePath(cells, MineLayout.Spawn, new HashSet<Vector2Int>(), risk, out int target);
+        Assert(target >= 0 && !path.Contains(MineLayout.HazardCells[0]), "Planner ignored warning risk");
+        Assert(MiningHazardScenario.Create(cells, sites, HazardScenarioMode.NoHazards, 1, 3, 6, 6, 4).Count == 0, "No-hazard control schedules a collapse");
+        results.Add("PASS random scenarios: 64 seeds replay identically, varied sites/times, distinct events, protected spawn/exits, warning before collapse.");
+        results.Add("PASS risk planner: warning penalty changes route before closure; no-hazard control has empty schedule.");
+    }
     [InitializeOnLoadMethod]
     static void ResumeAfterReload()
     {
@@ -155,7 +193,9 @@ public static class MiningExperienceValidation
                     results.Add("PASS editor preview disabled before Play; EditorOnly hierarchy excluded from builds.");
                 }
                 Capture("01-menu");
+                CaptureDetector();
                 ValidateGeometry(simulation);
+                simulation.scenarioMode = HazardScenarioMode.Scripted;
                 simulation.Begin(MiningMode.FirstPerson, true);
                 Assert(simulation.Mode == MiningMode.Story, "Legacy call opened FPP");
                 Assert(simulation.GetComponentsInChildren<UnityEngine.UI.Button>(true).Length > 0, "Menu buttons missing");
@@ -230,7 +270,7 @@ public static class MiningExperienceValidation
                     simulation.SetHazard(2, 1);
                     Assert(simulation.State == SafeMining.SessionState.Blocked && simulation.Route.Count == 0, "No-route story did not terminate");
                     results.Add("PASS no-route story: terminal Blocked outcome, empty route.");
-                    Finish(true, "All checks passed");
+                    randomRun = 0; randomSuccess = randomBlocked = 0; StartRandomRun(); phase = 7;
                 }
             }
             else if (phase == 6 && simulation.HazardLevels[2] == 1)
@@ -239,9 +279,45 @@ public static class MiningExperienceValidation
                 results.Add("PASS WebSocket: real Unity snapshot sent and hazard command received/applied on main thread.");
                 Finish(true, "All checks passed");
             }
+            else if (phase == 7)
+            {
+                for (int i = 0; i < simulation.HazardSites.Count; i++)
+                    Assert(simulation.Detectors[i].Level == simulation.HazardLevels[i], "Detector disagrees with hazard state");
+                if (simulation.Adaptive) foreach (var cell in simulation.Route)
+                    Assert(!simulation.Blocked.Contains(cell), "Adaptive route enters a closed cell");
+                if (simulation.State == SafeMining.SessionState.Success || simulation.State == SafeMining.SessionState.Blocked)
+                {
+                    if (simulation.State == SafeMining.SessionState.Success) randomSuccess++; else randomBlocked++;
+                    results.Add("PASS seeded story: seed " + simulation.ActiveSeed + ", " + (simulation.Adaptive ? "adaptive" : "static") +
+                        ", " + simulation.State + ", reroutes " + simulation.Reroutes + ", " + simulation.Elapsed.ToString("F1") + " s.");
+                    if (simulation.Adaptive) simulation.Export();
+                    randomRun++;
+                    if (randomRun < 8) StartRandomRun();
+                    else
+                    {
+                        Assert(randomSuccess > 0, "All random stories failed");
+                        results.Add("PASS random gameplay: four paired seeds, matching schedules, detector states, terminal outcomes and no closed adaptive route.");
+                        Finish(true, "All checks passed");
+                    }
+                }
+                else if (simulation.Elapsed > 180) throw new Exception("Random story stuck, seed " + simulation.ActiveSeed + " at " + simulation.Actor.position);
+            }
             if (phase == 1 && simulation.Elapsed > 200) throw new Exception("Story stuck at " + simulation.Actor.position + ", route " + simulation.DirectionHint());
         }
         catch (Exception e) { Finish(false, e.ToString()); }
+    }
+    static void StartRandomRun()
+    {
+        simulation.scenarioMode = HazardScenarioMode.Random; simulation.scenarioSeed = 101 + randomRun / 2;
+        simulation.Begin(MiningMode.Story, randomRun % 2 == 0); Time.timeScale = 12;
+        string key = ScheduleKey(simulation.Schedule);
+        if (simulation.Adaptive) pairedSchedule = key;
+        else Assert(key == pairedSchedule, "Adaptive/static schedules differ");
+        foreach (var detector in simulation.Detectors)
+        {
+            Assert(detector.Level == 0 && detector.display.text.Contains("NORMAL"), "Detector reset failed");
+            Assert(detector.indicator != null && detector.beacon != null && detector.GetComponent<AudioSource>() != null, "Detector asset incomplete");
+        }
     }
     static void ValidateGeometry(MiningSimulation s)
     {
@@ -298,6 +374,34 @@ public static class MiningExperienceValidation
         RenderTexture.active = previous; camera.targetTexture = null; canvas.renderMode = oldMode;
         scaler.uiScaleMode = oldScaleMode; scaler.enabled = false; scaler.enabled = true;
         UnityEngine.Object.Destroy(image); UnityEngine.Object.Destroy(rt);
+    }
+    static void CaptureDetector()
+    {
+        if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) return;
+        var detector = simulation.Detectors[0]; var camera = simulation.ViewCamera;
+        var position = camera.transform.position; var rotation = camera.transform.rotation; float fov = camera.fieldOfView;
+        var canvas = simulation.GetComponentInChildren<Canvas>(); bool showUI = canvas.enabled; canvas.enabled = false;
+        camera.transform.position = detector.transform.position - detector.transform.forward * 3.4f + Vector3.up * .15f;
+        camera.transform.LookAt(detector.transform.position + Vector3.up * .05f); camera.fieldOfView = 42;
+        var rt = new RenderTexture(1000, 800, 24); var oldTarget = camera.targetTexture; var oldActive = RenderTexture.active;
+        var picture = new Texture2D(1000, 800, TextureFormat.RGB24, false);
+        try
+        {
+            Directory.CreateDirectory("Validation");
+            for (int level = 0; level <= 2; level++)
+            {
+                detector.SetLevel(level); detector.display.font.RequestCharactersInTexture(detector.display.text, detector.display.fontSize);
+                camera.targetTexture = rt; camera.Render(); RenderTexture.active = rt;
+                picture.ReadPixels(new Rect(0, 0, 1000, 800), 0, 0); picture.Apply();
+                File.WriteAllBytes("Validation/detector-" + level + ".png", picture.EncodeToPNG());
+            }
+        }
+        finally
+        {
+            detector.SetLevel(0); camera.targetTexture = oldTarget; RenderTexture.active = oldActive;
+            camera.transform.SetPositionAndRotation(position, rotation); camera.fieldOfView = fov; canvas.enabled = showUI;
+            UnityEngine.Object.Destroy(picture); rt.Release(); UnityEngine.Object.Destroy(rt);
+        }
     }
     public static void RunBatch()
     {

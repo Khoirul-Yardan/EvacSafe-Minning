@@ -16,12 +16,27 @@ namespace SafeMining
     {
         [Header("Denah prosedural (ubah sebelum Play; X/Y = grid X/Z)")]
         public List<MineCorridor> corridors = MineLayout.DefaultCorridors();
+        [Header("Longsor dinamis")]
+        public HazardScenarioMode scenarioMode = HazardScenarioMode.Random;
+        public bool randomSeedOnLaunch = true;
+        public int scenarioSeed = 17023;
+        [Range(1, 12)] public int randomEventCount = 3;
+        [Min(4)] public float firstWarningSeconds = 6;
+        [Min(2)] public float secondsBetweenEvents = 6;
+        [Min(2)] public float warningDurationSeconds = 4;
+        [Min(0)] public float warningRiskPenalty = 24;
+        public int ActiveSeed { get; private set; }
+        public HazardScenarioMode ActiveScenario { get; private set; }
+        public List<Vector2Int> HazardSites { get; private set; } = new List<Vector2Int>();
+        public List<ScheduledRockfall> Schedule { get; private set; } = new List<ScheduledRockfall>();
+        public string LastDetectorAlert { get; private set; } = "Detektor aktif - kondisi normal";
+        public MiningLandslideDetector[] Detectors { get; private set; }
         public MiningMode Mode { get; private set; }
         public SessionState State { get; private set; } = SessionState.Menu;
         public bool Adaptive { get; private set; } = true;
         public HashSet<Vector2Int> Cells { get; private set; }
         public readonly HashSet<Vector2Int> Blocked = new HashSet<Vector2Int>();
-        public readonly int[] HazardLevels = new int[3]; // 0 normal, 1 warning, 2 closed
+        public int[] HazardLevels { get; private set; } = new int[0]; // 0 normal, 1 warning, 2 closed
         public List<Vector2Int> Route { get; private set; } = new List<Vector2Int>();
         public int TargetExit { get; private set; } = -1;
         public float Elapsed { get; private set; }
@@ -50,15 +65,15 @@ namespace SafeMining
 
         CharacterController body;
         Transform workerVisual, leftLeg, rightLeg, leftArm, rightArm;
-        readonly GameObject[] rubble = new GameObject[3];
-        readonly Light[] hazardLights = new Light[3];
+        GameObject[] rubble;
+        bool[] warningSent, collapseSent;
+        float activeWarningPenalty;
         readonly List<GameObject> arrows = new List<GameObject>();
         Material arrowMaterial;
         AudioSource radioAlarm;
         MiningHUD hud;
         MiningTelemetry telemetry;
         float pitch, gravityVelocity, nextPlan;
-        int stage;
         bool lastContact;
         Vector2Int lastCell;
         Vector3 previousPosition;
@@ -78,7 +93,9 @@ namespace SafeMining
             RenderSettings.ambientLight = new Color(.22f, .24f, .27f);
             RenderSettings.fog = true; RenderSettings.fogColor = new Color(.045f, .055f, .06f);
             RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = .017f;
+            HazardSites = MiningHazardScenario.DetectorSites(Cells);
             BuildActor(); BuildHazards();
+            if (randomSeedOnLaunch) scenarioSeed = Guid.NewGuid().GetHashCode();
             hud = gameObject.AddComponent<MiningHUD>(); hud.Simulation = this;
             telemetry = GetComponent<MiningTelemetry>() ?? gameObject.AddComponent<MiningTelemetry>(); telemetry.Simulation = this;
             arrowMaterial = MineLayout.Material("AR navigation green", new Color(.03f, 1f, .58f), true);
@@ -159,10 +176,11 @@ namespace SafeMining
 
 #if UNITY_EDITOR
         // Reuse the exact runtime model builders without starting a session or creating UI/input.
-        public static void CreateDocumentationActors(Transform parent)
+        public static void CreateDocumentationActors(Transform parent, HashSet<Vector2Int> cells)
         {
             var host = new GameObject("Temporary documentation builder"); host.SetActive(false);
             var builder = host.AddComponent<MiningSimulation>();
+            builder.Cells = cells; builder.HazardSites = MiningHazardScenario.DetectorSites(cells);
             builder.BuildActor(true); builder.BuildHazards();
             while (host.transform.childCount > 0) host.transform.GetChild(0).SetParent(parent, true);
             DestroyImmediate(host);
@@ -172,10 +190,12 @@ namespace SafeMining
         void BuildHazards()
         {
             var material = MineLayout.Material("Fallen shale", new Color(.28f, .24f, .21f));
-            var warning = MineLayout.Material("Red hazard beacon", new Color(1, .06f, .015f), true);
+            rubble = new GameObject[HazardSites.Count]; HazardLevels = new int[HazardSites.Count];
+            Detectors = new MiningLandslideDetector[HazardSites.Count];
+            var prefab = Resources.Load<GameObject>("Mining/LandslideDetector");
             for (int i = 0; i < rubble.Length; i++)
             {
-                var root = new GameObject("Landslide " + (i + 1)); root.transform.SetParent(transform, false); root.transform.position = MineLayout.World(MineLayout.HazardCells[i]);
+                var root = new GameObject("Landslide " + (i + 1)); root.transform.SetParent(transform, false); root.transform.position = MineLayout.World(HazardSites[i]);
                 for (int j = 0; j < 22; j++)
                 {
                     var rock = GameObject.CreatePrimitive(PrimitiveType.Sphere); rock.transform.SetParent(root.transform, false);
@@ -191,10 +211,17 @@ namespace SafeMining
                 }
                 // The barrier spans the full tunnel; the trigger shell is also used for exposure feedback.
                 var barrier = root.AddComponent<BoxCollider>(); barrier.center = new Vector3(0, 2, 0); barrier.size = new Vector3(6, 4, 5.8f);
-                root.AddComponent<MiningRockfall>(); rubble[i] = root; root.SetActive(false);
-                var beacon = MineLayout.Box(transform, "Hazard beacon", MineLayout.World(MineLayout.HazardCells[i]) + new Vector3(0, 3.5f, 0), new Vector3(.3f, .3f, .3f), warning, false);
-                hazardLights[i] = beacon.AddComponent<Light>(); hazardLights[i].range = 13; hazardLights[i].intensity = 4;
-                beacon.SetActive(false);
+                root.AddComponent<MiningRockfall>().Simulation = this; rubble[i] = root; root.SetActive(false);
+                var device = prefab != null ? Instantiate(prefab) : MiningLandslideDetector.CreateModel();
+                device.transform.SetParent(transform, false);
+                Vector2Int wall = Vector2Int.right;
+                foreach (var direction in MineLayout.Directions)
+                    if (!Cells.Contains(HazardSites[i] + direction)) { wall = direction; break; }
+                var outward = new Vector3(wall.x, 0, wall.y);
+                device.transform.position = MineLayout.World(HazardSites[i]) + outward * 2.48f + Vector3.up * 2.4f;
+                device.transform.rotation = Quaternion.LookRotation(outward);
+                Detectors[i] = device.GetComponent<MiningLandslideDetector>();
+                Detectors[i].Configure(Application.isPlaying ? this : null, i, HazardSites[i]);
             }
         }
 
@@ -205,14 +232,19 @@ namespace SafeMining
             mode = MiningMode.Story;
             Mode = mode; Adaptive = adaptive; State = SessionState.Running;
             Elapsed = Travelled = Exposure = ResponseMs = MaxResponseMs = 0; Reroutes = HazardContacts = 0;
-            stage = 0; pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
+            pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
             Blocked.Clear(); eventRows.Clear(); ExportStatus = "";
-            for (int i = 0; i < 3; i++) { HazardLevels[i] = 0; rubble[i].SetActive(false); hazardLights[i].gameObject.SetActive(false); }
+            ActiveSeed = scenarioSeed; ActiveScenario = scenarioMode; activeWarningPenalty = Mathf.Max(0, warningRiskPenalty);
+            Schedule = MiningHazardScenario.Create(Cells, HazardSites, ActiveScenario, ActiveSeed,
+                randomEventCount, firstWarningSeconds, secondsBetweenEvents, warningDurationSeconds);
+            warningSent = new bool[Schedule.Count]; collapseSent = new bool[Schedule.Count];
+            LastDetectorAlert = "Detektor aktif - kondisi normal";
+            for (int i = 0; i < HazardLevels.Length; i++) { HazardLevels[i] = 0; rubble[i].SetActive(false); Detectors[i].SetLevel(0); }
             body.enabled = false; Actor.position = MineLayout.World(MineLayout.Spawn) + Vector3.up * .04f; Actor.rotation = Quaternion.identity; body.enabled = true;
             previousPosition = Actor.position; lastCell = MineLayout.Cell(Actor.position);
             workerVisual.gameObject.SetActive(mode == MiningMode.Story);
             Phase = "01 / Briefing";
-            Dialogue = "Tim: Kita berada di galeri produksi. Ikuti petunjuk evakuasi menuju zona aman. Perhatikan perubahan kondisi lorong.";
+            Dialogue = "Tim: Kita berada di galeri produksi. Amati detektor kuning di dinding. Lampu kuning berarti waspada; merah berarti jalur tertutup.";
             Plan(false); LogEvent("start", mode + "/" + (adaptive ? "adaptive" : "static")); SetCursor(); UpdateCamera(true);
         }
 
@@ -258,34 +290,21 @@ namespace SafeMining
             if (Actor.position.y < -3) { State = SessionState.Blocked; Dialogue = "Posisi di luar map. Tekan R untuk mengulang."; SetCursor(); }
         }
 
+        public void NewRandomScenario()
+        {
+            if (State != SessionState.Menu) return;
+            scenarioMode = HazardScenarioMode.Random; scenarioSeed = Guid.NewGuid().GetHashCode();
+        }
+
         void RunTimeline()
         {
-            if (stage == 0 && Elapsed >= 6)
+            for (int i = 0; i < Schedule.Count && State == SessionState.Running; i++)
             {
-                stage++; Phase = "02 / Peringatan";
-                Dialogue = "Tim: Ada getaran dan debu di galeri pusat. Waspadai potensi longsor.";
-                SetHazard(0, 1);
-            }
-            if (State == SessionState.Running && stage == 1 && Elapsed >= 10)
-            {
-                stage++; Phase = "03 / Longsor utama";
-                Dialogue = Adaptive
-                    ? "Tim: Galeri pusat tertutup! Sistem memperbarui rute berdasarkan kondisi lorong."
-                    : "Tim: Galeri pusat tertutup. Pembanding statis mempertahankan rute awal dan akan berhenti sebelum longsor.";
-                SetHazard(0, 2);
-            }
-            if (State == SessionState.Running && stage == 2 && Elapsed >= 19)
-            {
-                stage++; Dialogue = "Tim: Penyangga galeri barat mulai tidak stabil. Waspadai perubahan kondisi berikutnya.";
-                SetHazard(1, 1);
-            }
-            if (State == SessionState.Running && stage == 3 && Elapsed >= 23)
-            {
-                stage++; Phase = "04 / Evakuasi lanjutan";
-                Dialogue = Adaptive
-                    ? "Tim: Galeri barat juga tertutup. Sistem memeriksa jalur alternatif menuju zona aman."
-                    : "Tim: Galeri barat juga tertutup. Jalur pembanding tetap mengikuti rencana awal.";
-                SetHazard(1, 2);
+                var item = Schedule[i];
+                if (!warningSent[i] && Elapsed >= item.warningTime)
+                { warningSent[i] = true; SetHazard(item.detectorIndex, 1); }
+                if (!collapseSent[i] && State == SessionState.Running && Elapsed >= item.collapseTime)
+                { collapseSent[i] = true; SetHazard(item.detectorIndex, 2); }
             }
         }
 
@@ -293,13 +312,18 @@ namespace SafeMining
         {
             if (index < 0 || index >= HazardLevels.Length || level < 0 || level > 2 || HazardLevels[index] == level) return;
             HazardLevels[index] = level;
-            if (level == 2) Blocked.Add(MineLayout.HazardCells[index]); else Blocked.Remove(MineLayout.HazardCells[index]);
-            rubble[index].SetActive(level == 2); hazardLights[index].gameObject.SetActive(level > 0);
-            hazardLights[index].color = level == 1 ? new Color(1, .55f, .03f) : Color.red;
+            if (level == 2) Blocked.Add(HazardSites[index]); else Blocked.Remove(HazardSites[index]);
+            rubble[index].SetActive(level == 2); Detectors[index].SetLevel(level);
+            string station = "D" + (index + 1).ToString("00");
+            LastDetectorAlert = station + " | " + (level == 0 ? "NORMAL" : level == 1 ? "AWAS LONGSOR - lampu kuning" : "JALUR TERTUTUP - lampu merah") +
+                " | grid " + HazardSites[index].x + ":" + HazardSites[index].y;
+            Phase = level == 2 ? "Longsor / " + station : level == 1 ? "Peringatan / " + station : "Pembaruan / " + station;
+            Dialogue = "Detektor " + station + (level == 1 ? ": getaran meningkat. Periksa lampu dan sirene di lorong." :
+                level == 2 ? ": longsor menutup lorong. " + (Adaptive ? "Mencari rute menuju zona aman." : "Baseline tetap memakai rute awal.") : ": kondisi lokasi diperbarui menjadi normal.");
             if (radioAlarm != null) radioAlarm.Play();
             LogEvent("hazard", index + ":" + level);
             if (Adaptive) Plan(true);
-            if (level == 2 && MineLayout.Cell(Actor.position) == MineLayout.HazardCells[index])
+            if (level == 2 && MineLayout.Cell(Actor.position) == HazardSites[index])
             {
                 HazardContacts++; State = SessionState.Blocked; Phase = "Terpapar longsor";
                 Dialogue = "Longsor terjadi di posisi Anda. Sesi dihentikan. Ulangi latihan dan hindari lorong yang sudah diberi peringatan.";
@@ -311,12 +335,15 @@ namespace SafeMining
         {
             var watch = Stopwatch.StartNew();
             var start = MineLayout.Cell(Actor.position);
-            var newPath = MineLayout.FindPath(Cells, start, Adaptive ? Blocked : new HashSet<Vector2Int>(), out int exit);
-            bool changed = TargetExit != exit;
-            if (!changed && hazardChange)
-            {
-                foreach (var p in Route) if (Blocked.Contains(p)) { changed = true; break; }
-            }
+            var risk = new Dictionary<Vector2Int, float>();
+            if (Adaptive) for (int i = 0; i < HazardSites.Count; i++) if (HazardLevels[i] == 1) risk[HazardSites[i]] = activeWarningPenalty;
+            var newPath = MineLayout.FindRiskAwarePath(Cells, start, Adaptive ? Blocked : new HashSet<Vector2Int>(), risk, out int exit);
+            // Ignore consumed route prefixes when comparing the remaining decisions.
+            int oldIndex = Route.Count > 0 && Route[0] == start ? 1 : 0;
+            int newIndex = newPath.Count > 0 && newPath[0] == start ? 1 : 0;
+            bool changed = TargetExit != exit || Route.Count - oldIndex != newPath.Count - newIndex;
+            if (!changed) for (int i = 0; i < Route.Count - oldIndex; i++)
+                if (Route[i + oldIndex] != newPath[i + newIndex]) { changed = true; break; }
             if (hazardChange && changed) Reroutes++;
             Route = newPath; TargetExit = exit;
             if (Route.Count > 1)
@@ -378,15 +405,15 @@ namespace SafeMining
         void CheckExposure(float dt)
         {
             bool near = false;
-            for (int i = 0; i < 3; i++)
-                if (HazardLevels[i] == 2 && Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.HazardCells[i])) < 4.5f) near = true;
+            for (int i = 0; i < HazardSites.Count; i++)
+                if (HazardLevels[i] == 2 && Vector3.Distance(Flat(Actor.position), MineLayout.World(HazardSites[i])) < 4.5f) near = true;
             if (near) { Exposure += dt; if (!lastContact) { HazardContacts++; LogEvent("hazard_contact", "warning_perimeter"); } }
             lastContact = near;
         }
         public float NearestHazardDistance()
         {
             float d = float.PositiveInfinity;
-            for (int i = 0; i < 3; i++) if (HazardLevels[i] > 0) d = Mathf.Min(d, Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.HazardCells[i])));
+            for (int i = 0; i < HazardSites.Count; i++) if (HazardLevels[i] > 0) d = Mathf.Min(d, Vector3.Distance(Flat(Actor.position), MineLayout.World(HazardSites[i])));
             return d;
         }
 
@@ -438,6 +465,17 @@ namespace SafeMining
         {
             eventRows.Add(string.Join(",", Elapsed.ToString("F3", CultureInfo.InvariantCulture), type, detail, Reroutes.ToString(), ResponseMs.ToString("F4", CultureInfo.InvariantCulture)));
         }
+        [Serializable] class ExperimentConfig
+        {
+            public int seed;
+            public string scenario, planner, unityVersion;
+            public float warningRiskPenalty;
+            public float cellSize = MineLayout.CellSize, workerSpeed = 2.8f, exposureRadius = 4.5f;
+            public Vector2Int spawn = MineLayout.Spawn;
+            public Vector2Int[] exits = MineLayout.Exits;
+            public Vector2Int[] detectorSites;
+            public ScheduledRockfall[] schedule;
+        }
         public void Export()
         {
             try
@@ -450,8 +488,18 @@ namespace SafeMining
                 foreach (var cell in layout) layoutRows.Add(cell.x + "," + cell.y);
                 File.WriteAllText(prefix + "_layout.csv", string.Join("\n", layoutRows));
                 File.WriteAllText(prefix + "_events.csv", "simulation_time_s,event,detail,reroutes,planning_ms\n" + string.Join("\n", eventRows));
-                File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms\n" +
-                    string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs));
+                File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms,scenario,seed\n" +
+                    string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4},{9},{10}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs, ActiveScenario, ActiveSeed));
+                var scheduleRows = new List<string> { "detector_index,cell_x,cell_z,warning_s,collapse_s" };
+                foreach (var item in Schedule)
+                    scheduleRows.Add(string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3}", item.detectorIndex,
+                        HazardSites[item.detectorIndex].x, HazardSites[item.detectorIndex].y, item.warningTime, item.collapseTime));
+                File.WriteAllText(prefix + "_scenario.csv", string.Join("\n", scheduleRows));
+                File.WriteAllText(prefix + "_config.json", JsonUtility.ToJson(new ExperimentConfig {
+                    seed = ActiveSeed, scenario = ActiveScenario.ToString(), warningRiskPenalty = activeWarningPenalty,
+                    detectorSites = HazardSites.ToArray(), schedule = Schedule.ToArray(),
+                    unityVersion = Application.unityVersion, planner = "Dijkstra_distance_plus_warning_penalty_v1"
+                }, true));
                 ExportStatus = "CSV tersimpan: " + directory; Debug.Log(ExportStatus);
             }
             catch (Exception e) { ExportStatus = "Ekspor gagal: " + e.Message; Debug.LogWarning(ExportStatus); }

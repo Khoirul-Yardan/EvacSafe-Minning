@@ -4,6 +4,7 @@ namespace SafeMining
 {
     public class MiningRockfall : MonoBehaviour
     {
+        public MiningSimulation Simulation;
         Transform[] stones;
         Vector3[] restingPositions;
         float elapsed;
@@ -15,6 +16,7 @@ namespace SafeMining
         void OnEnable() { elapsed = 0; }
         void Update()
         {
+            if (Simulation != null && Simulation.State != SessionState.Running) return;
             elapsed += Mathf.Min(Time.deltaTime, .05f);
             for (int i = 0; i < stones.Length; i++)
             {

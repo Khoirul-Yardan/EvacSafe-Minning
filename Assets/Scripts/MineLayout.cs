@@ -75,6 +75,42 @@ namespace SafeMining
         public static Vector3 World(Vector2Int cell) => new Vector3(cell.x * CellSize, 0, cell.y * CellSize);
         public static Vector2Int Cell(Vector3 position) => new Vector2Int(Mathf.RoundToInt(position.x / CellSize), Mathf.RoundToInt(position.z / CellSize));
 
+        // Distance in metres plus an explicit warning penalty; closed cells are never traversable.
+        public static List<Vector2Int> FindRiskAwarePath(HashSet<Vector2Int> cells, Vector2Int start,
+            HashSet<Vector2Int> blocked, Dictionary<Vector2Int, float> risk, out int exitIndex)
+        {
+            if (risk.Count == 0) return FindPath(cells, start, blocked, out exitIndex);
+            exitIndex = -1;
+            if (!cells.Contains(start) || blocked.Contains(start)) return new List<Vector2Int>();
+            var open = new List<Vector2Int> { start };
+            var cost = new Dictionary<Vector2Int, float> { [start] = 0 };
+            var previous = new Dictionary<Vector2Int, Vector2Int> { [start] = start };
+            var visited = new HashSet<Vector2Int>();
+            while (open.Count > 0)
+            {
+                int best = 0;
+                for (int i = 1; i < open.Count; i++) if (cost[open[i]] < cost[open[best]]) best = i;
+                var p = open[best]; open.RemoveAt(best);
+                if (!visited.Add(p)) continue;
+                int target = Array.IndexOf(Exits, p);
+                if (target >= 0)
+                {
+                    exitIndex = target; var path = new List<Vector2Int> { p };
+                    while (p != start) { p = previous[p]; path.Add(p); }
+                    path.Reverse(); return path;
+                }
+                foreach (var d in Directions)
+                {
+                    var n = p + d;
+                    if (!cells.Contains(n) || blocked.Contains(n) || visited.Contains(n)) continue;
+                    float next = cost[p] + CellSize + (risk.TryGetValue(n, out float penalty) ? Mathf.Max(0, penalty) : 0);
+                    if (cost.TryGetValue(n, out float known) && next >= known) continue;
+                    cost[n] = next; previous[n] = p; if (!open.Contains(n)) open.Add(n);
+                }
+            }
+            return new List<Vector2Int>();
+        }
+
         // Deterministic breadth-first search is shortest-path planning on this equal-cost graph.
         public static List<Vector2Int> FindPath(HashSet<Vector2Int> cells, Vector2Int start,
             HashSet<Vector2Int> blocked, out int exitIndex)
