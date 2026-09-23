@@ -58,24 +58,19 @@ namespace SafeMining
         }
         void BuildMenu()
         {
-            menu = Panel(canvas, "Mode selection", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(.015f, .035f, .055f, .92f));
+            menu = Panel(canvas, "Story simulation", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(.015f, .035f, .055f, .92f));
             Label(menu, "Eyebrow", "PENS   /   VIRTUAL UNDERGROUND MINE", new Vector2(0, 330), new Vector2(1100, 35), 19, cyan);
             Label(menu, "Title", "SAFE-MINING <color=#43F0B4>EVAC</color>", new Vector2(0, 267), new Vector2(1100, 80), 57, Color.white);
             Label(menu, "Subtitle", "Kenali bahaya. Temukan jalan pulang.", new Vector2(0, 198), new Vector2(1100, 45), 27, muted);
-            var story = Card(menu, "Story card", new Vector2(.5f, .5f), new Vector2(-285, -18), new Vector2(530, 325));
+            var story = Card(menu, "Story card", new Vector2(.5f, .5f), new Vector2(0, -18), new Vector2(700, 325));
             Label(story, "Number", "01  /  PELAJARI SKENARIO", new Vector2(0, 119), new Vector2(466, 30), 17, cyan);
             Label(story, "Heading", "Mode Cerita", new Vector2(0, 63), new Vector2(466, 60), 37, Color.white);
             Label(story, "Body", "Ikuti pekerja tambang menjalani evakuasi otomatis. Amati peringatan, longsor, dan perubahan rute melalui dialog tim.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
             Button(story, "Mulai Mode Cerita  >", new Vector2(0, -112), new Vector2(466, 56), () => Simulation.Begin(MiningMode.Story, adaptive), true);
-            var fpp = Card(menu, "FPP card", new Vector2(.5f, .5f), new Vector2(285, -18), new Vector2(530, 325));
-            Label(fpp, "Number", "02  /  TENTUKAN PILIHANMU", new Vector2(0, 119), new Vector2(466, 30), 17, cyan);
-            Label(fpp, "Heading", "Mode FPP", new Vector2(0, 63), new Vector2(466, 60), 37, Color.white);
-            Label(fpp, "Body", "Kendalikan pekerja dari sudut pandang pertama. Gunakan kacamata AR untuk menemukan jalur aman dan hindari longsor.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
-            Button(fpp, "Mulai Mode FPP  >", new Vector2(0, -112), new Vector2(466, 56), () => Simulation.Begin(MiningMode.FirstPerson, adaptive), true);
             var navigation = Button(menu, "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS", new Vector2(0, -237), new Vector2(1100, 52), () =>
             { adaptive = !adaptive; navButtonLabel.text = adaptive ? "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS" : "Navigasi: STATIS / BASELINE  |  jalur awal tetap"; });
             navButtonLabel = navigation.GetComponentInChildren<Text>();
-            Label(menu, "Controls", "WASD / joystick: bergerak     Mouse / stick kanan: melihat     Shift: cepat     Esc: jeda", new Vector2(0, -309), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
+            Label(menu, "Controls", "Pekerja bergerak otomatis     Esc: jeda / lanjut     R: ulangi sesi", new Vector2(0, -309), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
             Label(menu, "Research", "Simulasi penelitian berdasarkan abstrak SAFE-MINING EVAC  |  kondisi dan sensor dimodelkan secara virtual", new Vector2(0, -370), new Vector2(1300, 30), 16, muted, TextAnchor.MiddleCenter);
         }
         void BuildHUD()
@@ -100,7 +95,7 @@ namespace SafeMining
             direction = Label(guide, "Direction", "", new Vector2(0, 0), new Vector2(330, 43), 27, green, TextAnchor.MiddleCenter);
             distance = Label(guide, "Distance", "", new Vector2(0, -41), new Vector2(330, 26), 17, muted, TextAnchor.MiddleCenter);
             hazard = Label(hud, "Hazard alert", "", new Vector2(0, 255), new Vector2(720, 55), 24, new Color(1, .45f, .3f), TextAnchor.MiddleCenter);
-            Label(hud, "Control hints", "ESC  Jeda     TAB  Ganti mode & ulang     R  Ulang     G  Kacamata", new Vector2(0, -426), new Vector2(1000, 26), 15, muted, TextAnchor.MiddleCenter);
+            Label(hud, "Control hints", "ESC  Jeda / lanjut     R  Ulangi Mode Cerita", new Vector2(0, -426), new Vector2(1000, 26), 15, muted, TextAnchor.MiddleCenter);
             Button(banner, "II", new Vector2(237, 30), new Vector2(36, 34), () => Simulation.TogglePause());
             glasses = Panel(hud, "Safety glasses rim", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, Color.clear);
             foreach (int sx in new[] { -1, 1 }) foreach (int sy in new[] { -1, 1 })
@@ -120,7 +115,7 @@ namespace SafeMining
             modalTitle = Label(card, "Title", "", new Vector2(0, 237), new Vector2(710, 64), 38, green, TextAnchor.MiddleCenter);
             modalBody = Label(card, "Summary", "", new Vector2(0, 78), new Vector2(682, 220), 23, Color.white);
             Button(card, "Lanjut / Ulang", new Vector2(-177, -86), new Vector2(326, 54), () => { if (Simulation.State == SessionState.Paused) Simulation.TogglePause(); else Simulation.Begin(Simulation.Mode, Simulation.Adaptive); }, true);
-            Button(card, "Pilih mode", new Vector2(177, -86), new Vector2(326, 54), () => Simulation.Menu());
+            Button(card, "Menu simulasi", new Vector2(177, -86), new Vector2(326, 54), () => Simulation.Menu());
             Button(card, "Ekspor hasil evaluasi (.csv)", new Vector2(0, -161), new Vector2(682, 52), () => Simulation.Export());
             exportStatus = Label(card, "Export location", "", new Vector2(0, -245), new Vector2(690, 91), 15, muted, TextAnchor.MiddleCenter);
         }
@@ -166,8 +161,17 @@ namespace SafeMining
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear(); if (Simulation == null || Simulation.Cells == null) return;
-            Rect r = rectTransform.rect; float scale = Mathf.Min(r.width / 12, r.height / 18);
-            Vector2 Origin(Vector2Int p) => new Vector2(r.center.x + p.x * scale, r.center.y + (p.y - 3) * scale);
+            Rect r = rectTransform.rect;
+            if (Simulation.Cells.Count == 0) return;
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (var cell in Simulation.Cells)
+            {
+                minX = Mathf.Min(minX, cell.x); maxX = Mathf.Max(maxX, cell.x);
+                minY = Mathf.Min(minY, cell.y); maxY = Mathf.Max(maxY, cell.y);
+            }
+            var center = new Vector2((minX + maxX) * .5f, (minY + maxY) * .5f);
+            float scale = Mathf.Min(r.width / (maxX - minX + 3), r.height / (maxY - minY + 3));
+            Vector2 Origin(Vector2Int p) => r.center + ((Vector2)p - center) * scale;
             foreach (var cell in Simulation.Cells) Rect(vh, Origin(cell), new Vector2(scale * .93f, scale * .93f), new Color(.16f, .27f, .31f));
             if (Simulation.GlassesEnabled || Simulation.Mode == MiningMode.Story)
                 foreach (var cell in Simulation.Route) Rect(vh, Origin(cell), Vector2.one * (scale * .45f), new Color(.05f, .85f, .58f));
@@ -176,7 +180,7 @@ namespace SafeMining
             foreach (var exit in MineLayout.Exits) Rect(vh, Origin(exit), Vector2.one * scale * .85f, new Color(.3f, 1, .67f));
             if (Simulation.Actor == null) return;
             Vector3 p = Simulation.Actor.position;
-            Vector2 location = new Vector2(r.center.x + p.x / MineLayout.CellSize * scale, r.center.y + (p.z / MineLayout.CellSize - 3) * scale);
+            Vector2 location = r.center + (new Vector2(p.x, p.z) / MineLayout.CellSize - center) * scale;
             float a = -Simulation.Actor.eulerAngles.y * Mathf.Deg2Rad;
             Vector2 forward = new Vector2(-Mathf.Sin(a), Mathf.Cos(a)); Vector2 right = new Vector2(forward.y, -forward.x);
             int index = vh.currentVertCount;

@@ -54,6 +54,14 @@ public static class MiningDocumentationPreview
     }
     public static MiningEditorPreview Generate(Scene scene)
     {
+        MiningSimulation simulation = null;
+        foreach (var sceneRoot in scene.GetRootGameObjects())
+        {
+            simulation = sceneRoot.GetComponentInChildren<MiningSimulation>(true);
+            if (simulation != null) break;
+        }
+        // Validate before replacing a working preview.
+        var cells = MineLayout.CreateCells(simulation != null ? simulation.corridors : null);
         var old = Find(scene); if (old != null) Object.DestroyImmediate(old.gameObject);
         Directory.CreateDirectory(Path.GetDirectoryName(AssetPath));
         var container = AssetDatabase.LoadAssetAtPath<Mesh>(AssetPath);
@@ -64,7 +72,7 @@ public static class MiningDocumentationPreview
         SceneManager.MoveGameObjectToScene(root, scene); root.tag = "EditorOnly";
         var preview = root.AddComponent<MiningEditorPreview>();
         var environment = new GameObject("01 Environment | same map as Play").transform; environment.SetParent(root.transform, false);
-        var cells = MineLayout.CreateCells(); MineLayout.Build(environment, cells);
+        MineLayout.Build(environment, cells);
         var actors = new GameObject("02 Worker, landslides, cameras").transform; actors.SetParent(root.transform, false);
         MiningSimulation.CreateDocumentationActors(actors);
         preview.worker = actors.Find("Worker | Story + FPP").gameObject;
@@ -97,7 +105,12 @@ public static class MiningDocumentationPreview
         preview.storyCamera.transform.LookAt(start + new Vector3(0, 1.65f, 3));
         preview.fppCamera = Camera(root.transform, "Documentation camera | FPP", start + Vector3.up * 1.65f, Quaternion.identity);
         preview.overviewCamera = Camera(root.transform, "Documentation camera | Overview", new Vector3(0, 95, 18), Quaternion.Euler(90, 0, 0));
-        preview.overviewCamera.orthographic = true; preview.overviewCamera.orthographicSize = 57;
+        var bounds = new Bounds(MineLayout.World(MineLayout.Spawn), Vector3.zero);
+        foreach (var cell in cells) bounds.Encapsulate(MineLayout.World(cell));
+        preview.overviewCamera.transform.position = new Vector3(bounds.center.x, 150, bounds.center.z);
+        preview.overviewCamera.farClipPlane = 300;
+        preview.overviewCamera.orthographic = true;
+        preview.overviewCamera.orthographicSize = Mathf.Max(bounds.size.z * .5f + 9, (bounds.size.x * .5f + 9) / preview.overviewCamera.aspect);
         preview.overviewCamera.backgroundColor = new Color(.025f, .04f, .06f);
         foreach (var c in root.GetComponentsInChildren<Camera>(true)) c.enabled = c == preview.overviewCamera;
         foreach (var c in root.GetComponentsInChildren<Collider>(true)) c.enabled = false;

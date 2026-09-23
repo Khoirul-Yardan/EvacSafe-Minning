@@ -14,6 +14,8 @@ namespace SafeMining
 
     public class MiningSimulation : MonoBehaviour
     {
+        [Header("Denah prosedural (ubah sebelum Play; X/Y = grid X/Z)")]
+        public List<MineCorridor> corridors = MineLayout.DefaultCorridors();
         public MiningMode Mode { get; private set; }
         public SessionState State { get; private set; } = SessionState.Menu;
         public bool Adaptive { get; private set; } = true;
@@ -64,7 +66,12 @@ namespace SafeMining
 
         void Awake()
         {
-            Cells = MineLayout.CreateCells();
+            try { Cells = MineLayout.CreateCells(corridors); }
+            catch (ArgumentException e)
+            {
+                Debug.LogError("Denah tambang tidak valid: " + e.Message, this);
+                enabled = false; return;
+            }
             var environment = new GameObject("Environment Layer | Mine").transform; environment.SetParent(transform, false);
             MineLayout.Build(environment, Cells);
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
@@ -85,7 +92,7 @@ namespace SafeMining
                 }
                 arrow.SetActive(false); arrows.Add(arrow);
             }
-            Dialogue = "Pilih mode untuk memulai latihan evakuasi.";
+            Dialogue = "Pilih navigasi adaptif atau statis, lalu mulai Mode Cerita.";
             UpdateCamera(true);
         }
 
@@ -193,6 +200,9 @@ namespace SafeMining
 
         public void Begin(MiningMode mode, bool adaptive)
         {
+            if (Actor == null) return;
+            // Keep the legacy signature for scene/tool compatibility; research sessions use Story only.
+            mode = MiningMode.Story;
             Mode = mode; Adaptive = adaptive; State = SessionState.Running;
             Elapsed = Travelled = Exposure = ResponseMs = MaxResponseMs = 0; Reroutes = HazardContacts = 0;
             stage = 0; pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
@@ -222,13 +232,12 @@ namespace SafeMining
             {
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
                 if (keyboard.rKey.wasPressedThisFrame && State != SessionState.Menu) Begin(Mode, Adaptive);
-                if (keyboard.tabKey.wasPressedThisFrame && State != SessionState.Menu) Begin(Mode == MiningMode.Story ? MiningMode.FirstPerson : MiningMode.Story, Adaptive);
-                if (keyboard.gKey.wasPressedThisFrame) GlassesEnabled = !GlassesEnabled;
             }
             if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
             float dt = Mathf.Min(Time.deltaTime, .05f);
             Elapsed += dt;
             RunTimeline();
+            if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
             if (Mode == MiningMode.Story) MoveStory(dt); else MovePlayer(dt);
             if (body.isGrounded) gravityVelocity = -2; else gravityVelocity -= 20 * dt;
             body.Move(Vector3.up * (gravityVelocity * dt));
@@ -251,10 +260,33 @@ namespace SafeMining
 
         void RunTimeline()
         {
-            if (stage == 0 && Elapsed >= 6) { stage++; SetHazard(0, 1); Phase = "02 / Peringatan"; Dialogue = "Tim: Ada getaran dan debu di galeri pusat. Waspadai potensi longsor. Kacamata menerima pembaruan kondisi lorong."; }
-            if (stage == 1 && Elapsed >= 10) { stage++; SetHazard(0, 2); Phase = "03 / Longsor utama"; Dialogue = "Tim: Longsor menutup galeri pusat! Jalur merah tidak dapat dilewati. Periksa petunjuk baru menuju zona aman."; }
-            if (stage == 2 && Elapsed >= 19) { stage++; SetHazard(1, 1); Dialogue = "Tim: Penyangga galeri barat mulai tidak stabil. Bersiap memilih jalur penghubung ke timur."; }
-            if (stage == 3 && Elapsed >= 23) { stage++; SetHazard(1, 2); Phase = "04 / Evakuasi adaptif"; Dialogue = "Tim: Galeri barat juga tertutup. Jalur timur masih tersedia. Ikuti arah hijau dan hindari area merah."; }
+            if (stage == 0 && Elapsed >= 6)
+            {
+                stage++; Phase = "02 / Peringatan";
+                Dialogue = "Tim: Ada getaran dan debu di galeri pusat. Waspadai potensi longsor.";
+                SetHazard(0, 1);
+            }
+            if (State == SessionState.Running && stage == 1 && Elapsed >= 10)
+            {
+                stage++; Phase = "03 / Longsor utama";
+                Dialogue = Adaptive
+                    ? "Tim: Galeri pusat tertutup! Sistem memperbarui rute berdasarkan kondisi lorong."
+                    : "Tim: Galeri pusat tertutup. Pembanding statis mempertahankan rute awal dan akan berhenti sebelum longsor.";
+                SetHazard(0, 2);
+            }
+            if (State == SessionState.Running && stage == 2 && Elapsed >= 19)
+            {
+                stage++; Dialogue = "Tim: Penyangga galeri barat mulai tidak stabil. Waspadai perubahan kondisi berikutnya.";
+                SetHazard(1, 1);
+            }
+            if (State == SessionState.Running && stage == 3 && Elapsed >= 23)
+            {
+                stage++; Phase = "04 / Evakuasi lanjutan";
+                Dialogue = Adaptive
+                    ? "Tim: Galeri barat juga tertutup. Sistem memeriksa jalur alternatif menuju zona aman."
+                    : "Tim: Galeri barat juga tertutup. Jalur pembanding tetap mengikuti rencana awal.";
+                SetHazard(1, 2);
+            }
         }
 
         public void SetHazard(int index, int level)
@@ -297,7 +329,12 @@ namespace SafeMining
             // Start at the current cell centre; skipping it can cut diagonally through a junction wall.
             TrimRoute(); watch.Stop(); ResponseMs = (float)watch.Elapsed.TotalMilliseconds;
             if (hazardChange) { MaxResponseMs = Mathf.Max(MaxResponseMs, ResponseMs); LogEvent("route_update", "exit_" + exit); }
-            if (Route.Count == 0) Dialogue = "Tidak ada rute aman dari posisi ini. Mundur dari zona bahaya dan tunggu pembaruan; jangan ikuti arah merah.";
+            if (Route.Count == 0)
+            {
+                State = SessionState.Blocked; Phase = "Tidak ada rute aman";
+                Dialogue = "Tidak ada rute aman dari posisi pekerja. Sesi dihentikan dan dicatat sebagai terhalang.";
+                LogEvent("blocked", "no_safe_route"); SetCursor();
+            }
         }
 
         void TrimRoute()
@@ -407,6 +444,11 @@ namespace SafeMining
             {
                 string directory = Path.Combine(Application.persistentDataPath, "Evaluasi"); Directory.CreateDirectory(directory);
                 string prefix = Path.Combine(directory, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_" + Mode + "_" + (Adaptive ? "adaptive" : "static"));
+                var layout = new List<Vector2Int>(Cells);
+                layout.Sort((a, b) => a.x == b.x ? a.y.CompareTo(b.y) : a.x.CompareTo(b.x));
+                var layoutRows = new List<string> { "cell_x,cell_z" };
+                foreach (var cell in layout) layoutRows.Add(cell.x + "," + cell.y);
+                File.WriteAllText(prefix + "_layout.csv", string.Join("\n", layoutRows));
                 File.WriteAllText(prefix + "_events.csv", "simulation_time_s,event,detail,reroutes,planning_ms\n" + string.Join("\n", eventRows));
                 File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms\n" +
                     string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs));

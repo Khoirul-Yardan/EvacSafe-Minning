@@ -4,6 +4,14 @@ using UnityEngine;
 
 namespace SafeMining
 {
+    [Serializable]
+    public class MineCorridor
+    {
+        public Vector2Int from;
+        public Vector2Int to;
+        public MineCorridor(Vector2Int from, Vector2Int to) { this.from = from; this.to = to; }
+    }
+
     // One occupancy map owns geometry, collision, navigation and the minimap.
     // Internal tile edges never receive a wall, including T and four-way junctions.
     public static class MineLayout
@@ -15,19 +23,46 @@ namespace SafeMining
         public static readonly Vector2Int[] HazardCells = { new Vector2Int(0, 4), new Vector2Int(-4, 5), new Vector2Int(4, 1) };
         public static readonly Vector2Int[] Directions = { Vector2Int.up, Vector2Int.left, Vector2Int.right, Vector2Int.down };
 
-        public static HashSet<Vector2Int> CreateCells()
+        public static List<MineCorridor> DefaultCorridors() => new List<MineCorridor>
+        {
+            new MineCorridor(new Vector2Int(0, -5), new Vector2Int(0, 10)),
+            new MineCorridor(new Vector2Int(-4, 0), new Vector2Int(4, 0)),
+            new MineCorridor(new Vector2Int(-4, 3), new Vector2Int(4, 3)),
+            new MineCorridor(new Vector2Int(-4, 6), new Vector2Int(4, 6)),
+            new MineCorridor(new Vector2Int(-4, 0), new Vector2Int(-4, 8)),
+            new MineCorridor(new Vector2Int(4, 0), new Vector2Int(4, 8))
+        };
+
+        public static HashSet<Vector2Int> CreateCells(List<MineCorridor> corridors = null)
         {
             var cells = new HashSet<Vector2Int>();
-            AddLine(cells, new Vector2Int(0, -5), new Vector2Int(0, 10));
-            AddLine(cells, new Vector2Int(-4, 0), new Vector2Int(4, 0));
-            AddLine(cells, new Vector2Int(-4, 3), new Vector2Int(4, 3));
-            AddLine(cells, new Vector2Int(-4, 6), new Vector2Int(4, 6));
-            AddLine(cells, new Vector2Int(-4, 0), new Vector2Int(-4, 8));
-            AddLine(cells, new Vector2Int(4, 0), new Vector2Int(4, 8));
+            foreach (var corridor in corridors ?? DefaultCorridors())
+            {
+                if (corridor == null) throw new ArgumentException("Koridor tidak boleh kosong.");
+                var a = corridor.from; var b = corridor.to;
+                if (a.x != b.x && a.y != b.y)
+                    throw new ArgumentException("Koridor harus horizontal atau vertikal: " + a + " -> " + b);
+                if (Math.Abs((long)a.x) > 30 || Math.Abs((long)a.y) > 30 || Math.Abs((long)b.x) > 30 || Math.Abs((long)b.y) > 30)
+                    throw new ArgumentException("Koordinat koridor harus berada di antara -30 dan 30 sel.");
+                AddLine(cells, a, b);
+            }
             // Widen the refuge rooms without opening the exterior shell.
             foreach (var exit in Exits)
                 for (int x = -1; x <= 1; x++)
                     for (int z = 0; z <= 1; z++) cells.Add(exit + new Vector2Int(x, z));
+            if (cells.Count > 300) throw new ArgumentException("Maksimum 300 sel untuk skenario ini.");
+            if (!cells.Contains(Spawn)) throw new ArgumentException("Koridor harus memuat titik awal " + Spawn);
+            foreach (var hazard in HazardCells)
+                if (!cells.Contains(hazard)) throw new ArgumentException("Koridor harus memuat lokasi longsor " + hazard);
+            var reachable = new HashSet<Vector2Int> { Spawn };
+            var queue = new Queue<Vector2Int>(); queue.Enqueue(Spawn);
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                foreach (var direction in Directions)
+                    if (cells.Contains(cell + direction) && reachable.Add(cell + direction)) queue.Enqueue(cell + direction);
+            }
+            if (reachable.Count != cells.Count) throw new ArgumentException("Semua koridor dan zona aman harus terhubung ke titik awal.");
             return cells;
         }
 

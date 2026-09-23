@@ -1,0 +1,12 @@
+PASS configurable layout: topology changes; diagonal, disconnected and empty layouts rejected.
+PASS graph: 524 origin/hazard combinations; blocked-route failure is safe.
+PASS editor preview disabled before Play; EditorOnly hierarchy excluded from builds.
+PASS geometry: 67 floor/roof cells, 152 open connections (3 lanes each), 116 sealed boundaries.
+PASS story-only mode: legacy FPP request coerced to Story; no FPP menu button.
+PASS adaptive story: success, 2 reroutes, 45.6 s, exposure 0
+PASS static baseline: stops before landslide, zero reroutes.
+PASS story: routes from actor position, pause/resume, refuge completion.
+PASS CSV export and independent session reset.
+PASS worker collision: capsule cannot cross exterior wall.
+PASS no-route story: terminal Blocked outcome, empty route.
+All checks passed

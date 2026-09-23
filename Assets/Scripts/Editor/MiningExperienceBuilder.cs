@@ -28,7 +28,7 @@ public static class MiningExperienceBuilder
         if (AssetDatabase.LoadAssetAtPath<Material>("Assets/Resources/MiningEmissive.mat") == null)
             AssetDatabase.CreateAsset(MineLayout.Material("MiningEmissive", Color.white, true), "Assets/Resources/MiningEmissive.mat");
     }
-    [MenuItem("SafeMining/Create Story + FPP Experience", priority = 0)]
+    [MenuItem("SafeMining/Create Story Experience", priority = 0)]
     public static void CreateScene()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
@@ -36,7 +36,7 @@ public static class MiningExperienceBuilder
         if (File.Exists(ScenePath)) { Debug.Log("Experience already exists: " + ScenePath); return; }
         var previous = SceneManager.GetActiveScene();
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
-        var root = new GameObject("SAFE-MINING EVAC | Story + FPP");
+        var root = new GameObject("SAFE-MINING EVAC | Story");
         SceneManager.MoveGameObjectToScene(root, scene); root.AddComponent<MiningSimulation>(); root.AddComponent<MiningTelemetry>();
         Directory.CreateDirectory("Assets/Scenes");
         // Keep a Lit material in Resources so runtime-generated geometry works in player builds too.
@@ -45,9 +45,9 @@ public static class MiningExperienceBuilder
         var builds = new List<EditorBuildSettingsScene> { new EditorBuildSettingsScene(ScenePath, true) };
         foreach (var old in EditorBuildSettings.scenes) if (old.path != ScenePath) builds.Add(old);
         EditorBuildSettings.scenes = builds.ToArray(); AssetDatabase.SaveAssets();
-        Debug.Log("[SafeMining] Story + FPP ready: " + ScenePath);
+        Debug.Log("[SafeMining] Story ready: " + ScenePath);
     }
-    [MenuItem("SafeMining/Open Story + FPP Experience", priority = 1)]
+    [MenuItem("SafeMining/Open Story Experience", priority = 1)]
     public static void OpenScene()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
@@ -81,6 +81,25 @@ public static class MiningExperienceValidation
     static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
     public static void ValidateGraph()
     {
+        var corridors = MineLayout.DefaultCorridors();
+        var original = MineLayout.CreateCells(corridors);
+        corridors.Add(new MineCorridor(new Vector2Int(-4, 2), new Vector2Int(4, 2)));
+        var variant = MineLayout.CreateCells(corridors);
+        Assert(variant.Count > original.Count && variant.Contains(new Vector2Int(2, 2)), "Inspector corridor did not change topology");
+        Assert(MineLayout.FindPath(variant, MineLayout.Spawn, new HashSet<Vector2Int>(), out _).Count > 0, "Variant has no route");
+        corridors.Add(new MineCorridor(Vector2Int.zero, new Vector2Int(1, 2)));
+        bool rejected = false;
+        try { MineLayout.CreateCells(corridors); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "Diagonal corridor was accepted");
+        corridors = MineLayout.DefaultCorridors();
+        corridors.Add(new MineCorridor(new Vector2Int(20, 20), new Vector2Int(21, 20)));
+        rejected = false;
+        try { MineLayout.CreateCells(corridors); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "Disconnected corridor was accepted");
+        rejected = false;
+        try { MineLayout.CreateCells(new List<MineCorridor>()); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "Empty layout was accepted");
+        results.Add("PASS configurable layout: topology changes; diagonal, disconnected and empty layouts rejected.");
         var cells = MineLayout.CreateCells(); var blocked = new HashSet<Vector2Int>();
         int checks = 0;
         for (int combination = 0; combination < 8; combination++)
@@ -137,6 +156,12 @@ public static class MiningExperienceValidation
                 }
                 Capture("01-menu");
                 ValidateGeometry(simulation);
+                simulation.Begin(MiningMode.FirstPerson, true);
+                Assert(simulation.Mode == MiningMode.Story, "Legacy call opened FPP");
+                Assert(simulation.GetComponentsInChildren<UnityEngine.UI.Button>(true).Length > 0, "Menu buttons missing");
+                foreach (var button in simulation.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                    Assert(!button.name.Contains("FPP"), "Menu still offers FPP");
+                results.Add("PASS story-only mode: legacy FPP request coerced to Story; no FPP menu button.");
                 simulation.Begin(MiningMode.Story, true); Time.timeScale = 12;
                 phase = 1;
             }
@@ -155,19 +180,19 @@ public static class MiningExperienceValidation
             {
                 Assert(simulation.Reroutes == 0, "Static baseline changed route");
                 results.Add("PASS static baseline: stops before landslide, zero reroutes.");
-                simulation.Begin(MiningMode.FirstPerson, true);
+                simulation.Begin(MiningMode.Story, true);
                 var body = simulation.Actor.GetComponent<CharacterController>(); body.enabled = false;
                 simulation.Actor.position = MineLayout.World(new Vector2Int(4, 6)) + Vector3.up * .05f; body.enabled = true;
                 simulation.SetHazard(0, 2); simulation.SetHazard(1, 2);
-                Assert(simulation.Route.Count > 0 && simulation.Route[0].x == 4, "FPP route is not from player position");
+                Assert(simulation.Route.Count > 0 && simulation.Route[0].x == 4, "Story route is not from actor position");
                 simulation.TogglePause(); Assert(simulation.State == SafeMining.SessionState.Paused, "Pause failed"); simulation.TogglePause();
                 body.enabled = false; simulation.Actor.position = MineLayout.World(MineLayout.Exits[2]) + Vector3.up * .05f; body.enabled = true; phase = 3;
             }
             else if (phase == 3 && simulation.State == SafeMining.SessionState.Success)
             {
-                results.Add("PASS FPP: routes from player position, pause/resume, refuge completion.");
+                results.Add("PASS story: routes from actor position, pause/resume, refuge completion.");
                 simulation.Export(); Assert(simulation.ExportStatus.StartsWith("CSV tersimpan"), "CSV export failed");
-                simulation.Begin(MiningMode.FirstPerson, true);
+                simulation.Begin(MiningMode.Story, true);
                 Assert(simulation.Elapsed == 0 && simulation.Blocked.Count == 0 && simulation.Reroutes == 0, "Reset leaked session state");
                 results.Add("PASS CSV export and independent session reset.");
                 var body = simulation.Actor.GetComponent<CharacterController>(); body.enabled = false;
@@ -177,14 +202,14 @@ public static class MiningExperienceValidation
             }
             else if (phase == 4 && simulation.Elapsed >= 1.5f)
             {
-                Capture("03-fpp");
+                Capture("03-story-hazards");
                 // A character-sized movement probe must remain inside the physical tunnel.
-                simulation.Begin(MiningMode.FirstPerson, true);
+                simulation.Begin(MiningMode.Story, true);
                 var body = simulation.Actor.GetComponent<CharacterController>();
                 for (int i = 0; i < 100; i++) body.Move(Vector3.right * .1f);
-                Assert(simulation.Actor.position.x < 3, "FPP walked through exterior wall");
-                results.Add("PASS FPP collision: manual capsule cannot cross exterior wall.");
-                simulation.Begin(MiningMode.FirstPerson, true); simulation.TogglePause();
+                Assert(simulation.Actor.position.x < 3, "Worker capsule crossed exterior wall");
+                results.Add("PASS worker collision: capsule cannot cross exterior wall.");
+                simulation.Begin(MiningMode.Story, true); simulation.TogglePause();
                 phase = 5; lastPhaseFrame = frames;
             }
             else if (phase == 5 && frames > lastPhaseFrame + 5)
@@ -193,10 +218,20 @@ public static class MiningExperienceValidation
                 Assert(simulation.GetComponentInChildren<SafeMining.MineMapGraphic>().GetComponent<CanvasRenderer>() != null, "Minimap renderer missing");
                 if (Array.IndexOf(Environment.GetCommandLineArgs(), "-miningWebSocketTest") >= 0)
                 {
-                    simulation.Begin(MiningMode.FirstPerson, true);
+                    simulation.Begin(MiningMode.Story, true);
                     simulation.GetComponent<MiningTelemetry>().Connect(); phase = 6;
                 }
-                else Finish(true, "All checks passed");
+                else
+                {
+                    simulation.Begin(MiningMode.Story, true);
+                    var body = simulation.Actor.GetComponent<CharacterController>(); body.enabled = false;
+                    simulation.Actor.position = MineLayout.World(new Vector2Int(0, 5)) + Vector3.up * .05f; body.enabled = true;
+                    foreach (var direction in MineLayout.Directions) simulation.Blocked.Add(new Vector2Int(0, 5) + direction);
+                    simulation.SetHazard(2, 1);
+                    Assert(simulation.State == SafeMining.SessionState.Blocked && simulation.Route.Count == 0, "No-route story did not terminate");
+                    results.Add("PASS no-route story: terminal Blocked outcome, empty route.");
+                    Finish(true, "All checks passed");
+                }
             }
             else if (phase == 6 && simulation.HazardLevels[2] == 1)
             {

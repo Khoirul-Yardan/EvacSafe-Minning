@@ -1,21 +1,16 @@
 # SAFE-MINING EVAC
 
-Simulasi evakuasi tambang Unity dengan **Mode Cerita** dan **Mode FPP**, navigasi kacamata AR, longsor dinamis, dan pembanding rute statis sesuai abstrak PENS.
+Simulasi evakuasi tambang Unity dalam **Mode Cerita otomatis**, dengan pembanding navigasi **adaptif** dan **statis**. Pembaruan: 23 September 2026.
 
 1. Buka `Assets/Scenes/SafeMining_Experience.unity` di Unity 6000.3.23f1.
-2. Tekan **Play**, lalu pilih mode.
-3. FPP: **WASD + mouse** atau **gamepad**. **Esc** untuk jeda, **R** untuk ulang, **G** untuk kacamata.
+2. Tekan **Play**, pilih navigasi adaptif atau statis, lalu **Mulai Mode Cerita**.
+3. **Esc** untuk jeda/lanjut; **R** untuk mengulang sesi. Pekerja bergerak otomatis.
 
-Untuk dokumentasi tanpa Play, pilih **EDITOR PREVIEW** di Hierarchy. Gunakan tombol Inspector untuk **seluruh map**, **kamera cerita**, **kamera FPP**, dan **ekspor PNG**. Pilihan tampilan juga tersedia di **SafeMining → Documentation**.
+Tunnel dibangun secara **prosedural deterministik**. Denah kini dapat diubah melalui daftar **Corridors** pada komponen `MiningSimulation` sebelum Play. Status longsor dan rute adaptif berubah saat simulasi berjalan. Topologi tidak diacak atau dibangun ulang di tengah sesi.
 
-[Panduan, skenario, kesesuaian abstrak, dan WebSocket](Documentation/SAFE_MINING.md)
+- [Panduan pengaturan tunnel, simulasi cerita, dan evaluasi](Documentation/SAFE_MINING.md)
+- [Update terbaru: audit procedural/dinamis dan cara menjawab research problem](Documentation/UPDATE_RESEARCH_2026-09-23.md)
 
-[Hasil pengujian gameplay](Documentation/Validation/final-gameplay.txt) · [Pengujian WebSocket](Documentation/Validation/websocket-and-gameplay.txt)
+Untuk melihat denah tanpa Play, pilih **EDITOR PREVIEW** di Hierarchy. Setelah mengubah koridor, jalankan **SafeMining > Documentation > Rebuild Editor Preview** dan simpan scene. Gunakan kamera seluruh map atau kamera cerita untuk dokumentasi.
 
-Model dan map menggunakan geometri prosedural bergaya sederhana. Denah diuji untuk konektivitas jalur dan collision; tampilannya bukan rekonstruksi fotorealistis ilustrasi referensi.
-
-![Pilihan mode](Documentation/Previews/menu.png)
-
-![Mode cerita](Documentation/Previews/story.png)
-
-![Mode FPP dengan longsor aktif dalam pemeriksaan visual](Documentation/Previews/fpp.png)
+Scene `SafeMiningEvac_Demo.unity` adalah demo lama dengan alur berbeda. Gunakan `SafeMining_Experience.unity` untuk penelitian terbaru. Gambar menu/FPP serta log validasi lama dalam `Documentation` merupakan arsip sebelum pembatasan Mode Cerita; lihat dokumen update untuk bukti validasi terbaru.

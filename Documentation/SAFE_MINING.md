@@ -1,106 +1,118 @@
-# SAFE-MINING EVAC — mode cerita dan FPP
+# SAFE-MINING EVAC - panduan Mode Cerita
 
-Buka `Assets/Scenes/SafeMining_Experience.unity`, lalu tekan **Play**. Pilih **Mode Cerita** atau **Mode FPP**. Jika scene belum terlihat setelah Unity selesai mengimpor, gunakan menu **SafeMining → Open Story + FPP Experience**. Scene demo sebelumnya tetap tersedia.
+Pembaruan 23 September 2026. Simulasi penelitian menggunakan **Mode Cerita otomatis**, dengan navigasi **adaptif** atau **statis** pada denah dan kejadian yang sama. [Audit dan penjelasan research problem](UPDATE_RESEARCH_2026-09-23.md) menjelaskan dasar perbandingan dan batas klaim.
 
-## Dokumentasi tanpa Play
+## Menjalankan simulasi
 
-Scene yang sama memiliki hierarchy **EDITOR PREVIEW | Documentation (excluded from Play)**. Map, karakter, lampu, rel, rambu, dan kamera dokumentasi tersimpan sebagai objek scene; mesh dan materialnya berada di `Assets/Generated/MiningDocumentation/PreviewResources.asset` agar tetap tampil setelah Unity dibuka ulang.
-
-Pilih root **EDITOR PREVIEW** di Hierarchy. Inspector menyediakan:
-
-- **Seluruh map / atap terbuka**: menampilkan susunan lorong dari atas; paling sesuai untuk dokumentasi denah.
-- **Sudut kamera cerita**: tampilan dari belakang pekerja, dengan atap ditampilkan.
-- **Sudut kamera FPP**: tampilan setinggi mata pekerja.
-- **Tampilkan contoh longsor**: memperlihatkan tumpukan batu untuk dokumentasi bahaya.
-- **Ekspor gambar PNG 1920 x 1080**: menyimpan sudut kamera yang dipilih ke `Documentation/Previews/editor-overview.png`, `editor-story.png`, atau `editor-fpp.png`. Ekspor ulang mengganti gambar sudut tersebut.
-
-Ketiga pilihan kamera juga tersedia pada menu **SafeMining → Documentation**. Kamera terpilih terlihat langsung di **Game View** tanpa Play; **Scene View** dapat diputar dan diperbesar seperti biasa. Aktifkan **Gizmos** untuk label titik awal, zona aman, dan potensi longsor. PNG kamera tidak menyertakan label Gizmos atau HUD permainan; gambar HUD tetap diambil saat Play.
-
-Pratinjau ini untuk dokumentasi. Perubahan manual pada objek pratinjau tidak mengubah map runtime; perubahan denah utama tetap melalui `MineLayout`. Gunakan **Rebuild Editor Preview** setelah mengubah generator. Rebuild mengganti hierarchy dan resource pratinjau yang dihasilkan, jadi jangan menyimpan aset buatan sendiri di resource generated tersebut.
-
-Saat Play, seluruh pratinjau dinonaktifkan sebelum simulasi membuat objek runtime. Tag `EditorOnly` juga mengecualikannya dari build. Setelah Stop, tampilan editor kembali. Scene tidak lagi perlu dijalankan hanya untuk melihat bentuk map.
-
-## Kontrol
+Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan **Play**, pilih jenis navigasi, lalu **Mulai Mode Cerita**. Menu editor: **SafeMining > Open Story Experience**.
 
 | Kontrol | Fungsi |
 |---|---|
-| WASD / analog kiri gamepad | Berjalan dalam FPP |
-| Mouse / analog kanan | Melihat dalam FPP |
-| Shift kiri | Berjalan cepat |
-| Esc | Jeda / lanjut; membuka kursor |
-| G | Mengaktifkan / menonaktifkan petunjuk kacamata |
-| R | Memulai sesi baru dengan mode dan navigasi yang sama |
-| Tab | Beralih cerita ↔ FPP dan memulai sesi baru |
+| Esc | Jeda / lanjut |
+| R | Mengulang cerita dengan jenis navigasi yang sama |
+| Menu simulasi pada panel hasil/jeda | Kembali untuk memilih adaptif atau statis |
+| Ekspor hasil evaluasi (.csv) | Menyimpan data sesi saat ini |
 
-Mode cerita menggerakkan pekerja otomatis, dengan kamera mengikuti dari belakang, animasi berjalan sederhana, APD, dan dialog tim. Mode FPP memakai gerakan manual dengan CharacterController. Kacamata hanya menyarankan jalur; pemain tetap memilih sendiri. Semua exit yang ditandai hijau dapat menyelesaikan evakuasi.
+Pekerja berjalan otomatis, kamera mengikuti dari belakang, dan dialog tim menerangkan perubahan kondisi. Tidak ada pilihan FPP atau pergantian mode melalui Tab. Enum dan fungsi internal FPP lama masih ada untuk kompatibilitas, tetapi `Begin(...)` selalu memulai Story. Kamera dokumentasi FPP yang tersimpan hanya merupakan sudut pratinjau editor.
 
-## Kesesuaian dengan abstrak
+## Mengubah tunnel tanpa mengedit kode
 
-Acuan: **Towards SAFE-MINING EVAC: Perancangan Simulasi Navigasi Evakuasi Adaptif Berbasis Unity dan Edge Intelligence pada Area Tambang Bawah Tanah**, abstrak tim PENS yang diberikan pengguna (`INJECTION EPW 17_Abstrak_... (1).pdf`).
+1. **Stop Play**, pilih objek yang memiliki komponen **MiningSimulation** pada scene utama (nama objek scene lama mungkin masih mengandung `Story + FPP`).
+2. Buka daftar **Corridors**. Setiap elemen memiliki `From` dan `To`, berupa koordinat grid. `X` menjadi sumbu dunia X, `Y` menjadi sumbu dunia Z; satu sel berukuran 6 meter.
+3. Ubah ujung koridor, tambah, atau hapus elemen. Kedua ujung harus berada pada satu baris atau kolom. Contoh tambahan penghubung: `From = (-4, 2)`, `To = (4, 2)`.
+4. Pertahankan titik awal, tiga titik longsor, dan koneksi ke seluruh zona aman. Jalankan **SafeMining > Documentation > Rebuild Editor Preview** untuk memeriksa bentuknya, lalu simpan scene.
+5. Tekan **Play**. Lantai, dinding, atap, collider, graf navigasi, dan minimap dibentuk dari himpunan sel yang sama. Uji ulang adaptif dan statis untuk setiap denah.
 
-| Kebutuhan abstrak | Implementasi |
-|---|---|
-| Lingkungan tambang virtual | Galeri pusat, barat, timur, dua koridor penghubung dan tiga ruang aman |
-| Posisi pekerja dan bahaya dinamis | Posisi aktor aktif; status normal, waspada, tertutup pada tiga lokasi longsor |
-| Dynamic path planning | Pencarian jalur terpendek pada graf sel berbiaya sama, dihitung ulang saat bahaya berubah; dalam FPP dihitung dari posisi pemain |
-| Pemrosesan edge | Planner lokal dalam proses Unity, tanpa ketergantungan cloud. Ini simulasi komputasi lokal, bukan perangkat edge fisik atau model ML |
-| Komunikasi MQTT atau WebSocket | Adapter WebSocket opsional: mengirim snapshot dan menerima perintah bahaya; mode offline berfungsi tanpa server |
-| Baseline statis | Jalur yang ditetapkan saat awal sesi dipertahankan; cerita berhenti sebelum menabrak longsor |
-| Waktu, keamanan, reroute, respons | Timer simulasi, jarak, paparan perimeter bahaya, jumlah kontak, perubahan rute, waktu komputasi; hasil dan event dapat diekspor ke CSV |
+Denah awal terdiri atas:
 
-Kacamata AR dan dua mode interaksi merupakan pengembangan sesuai gambar dan permintaan pengguna. Model karakter, batuan, dan perlengkapan dibuat secara prosedural dengan gaya sederhana; bukan aset fotorealistis seperti ilustrasi referensi. Sensor dan kedalaman tambang adalah representasi virtual, bukan pengukuran perangkat nyata.
+| Koridor | From | To |
+|---|---|---|
+| Galeri pusat | (0, -5) | (0, 10) |
+| Penghubung bawah | (-4, 0) | (4, 0) |
+| Penghubung tengah | (-4, 3) | (4, 3) |
+| Penghubung atas | (-4, 6) | (4, 6) |
+| Galeri barat | (-4, 0) | (-4, 8) |
+| Galeri timur | (4, 0) | (4, 8) |
 
-## Skenario yang dapat diulang
+Titik skenario tetap berada di `MineLayout.cs`: awal `(0, -4)`; zona aman `(0, 10)`, `(-4, 8)`, `(4, 8)`; longsor pusat `(0, 4)`, barat `(-4, 5)`, timur `(4, 1)`. Ruang aman diperlebar otomatis. Lokasi/jumlah titik skenario, ukuran sel, kecepatan pekerja, dan jadwal cerita belum menjadi pengaturan Inspector.
+
+Generator menolak koridor diagonal, koordinat di luar -30 hingga 30, denah lebih dari 300 sel, titik awal/longsor yang hilang, serta komponen lorong/ruang aman yang terputus. Error tampil di Console; simulasi tidak dimulai. Saat rebuild, validasi dilakukan sebelum pratinjau lama diganti. Konektivitas awal tidak menjamin rute tetap tersedia setelah longsor.
+
+Pengubahan ini berlaku **antar sesi**. Mengubah Corridors ketika Play tidak mengubah geometri sesi aktif; hentikan dan mulai Play lagi. Tombol R mereset kejadian dan pekerja pada denah yang sudah dibangun. Denah tersimpan di scene, bukan generator acak berbasis seed.
+
+## Apa yang prosedural dan dinamis?
+
+`MineLayout.CreateCells(corridors)` menghasilkan occupancy map; `MineLayout.Build(...)` membentuk geometri dan collision. Tekstur mineral, variasi permukaan batu, penyangga, rel, lampu, dan properti dibuat oleh kode. Input yang sama menghasilkan denah yang sama.
+
+Saat sesi berjalan, `MiningSimulation.SetHazard(...)` mengubah status normal/waspada/tertutup. Status tertutup menambah sel ke `Blocked` serta mengaktifkan longsor dan collider. Navigasi adaptif menjalankan kembali BFS dari sel pekerja menuju zona aman terdekat menurut jumlah langkah graf. Semua langkah berbobot sama; status waspada belum menambah bobot risiko dan belum menutup sel.
+
+Artinya, **status keterlintasan dan rute dinamis**, sedangkan **bentuk tunnel tetap selama sesi**. Tidak ada simulasi penggalian, deformasi geologi, pengacakan denah, atau editor tunnel langsung saat Play.
+
+## Alur cerita bawaan
 
 | Waktu simulasi | Peristiwa |
 |---|---|
-| 0–4 s | Briefing; pekerja cerita menunggu instruksi |
-| 6 s | Peringatan getaran galeri pusat; status waspada |
-| 10 s | Longsor galeri pusat menutup rute awal; navigasi adaptif memilih alternatif |
-| 19 s | Peringatan galeri barat |
-| 23 s | Longsor barat; navigasi kembali mencari rute aman melalui jaringan penghubung |
-| Tiba di zona aman | Skenario berhenti dan hasil ditampilkan; tidak restart otomatis |
+| 0-4 detik | Briefing; pekerja menunggu |
+| Setelah 4 detik | Pekerja mengikuti rute awal dengan kecepatan nominal 2,8 m/s |
+| 6 detik | Peringatan galeri pusat |
+| 10 detik | Longsor pusat; adaptif menghitung ulang, statis mempertahankan rute awal |
+| 19 detik | Peringatan galeri barat, bila sesi masih berlangsung |
+| 23 detik | Longsor barat; adaptif memeriksa jalur alternatif, bila sesi masih berlangsung |
+| Tiba di zona aman | Outcome `Success`; hasil ditampilkan |
+| Jalur statis tertutup / tidak ada rute adaptif | Outcome `Blocked`; hasil ditampilkan |
 
-Longsor tidak otomatis hilang. Peringatan merah, tumpukan batu, dan collider tetap aktif sampai sesi diulang atau ada pembaruan eksplisit. Tidak ada fallback planner yang mengarahkan pekerja melewati bahaya. Jika semua rute tidak tersedia, kacamata menampilkan tidak ada rute aman.
+Tidak ada restart otomatis. Longsor tetap aktif sampai sesi diulang atau menerima pembaruan eksplisit. Dialog menjelaskan kejadian, sedangkan pilihan rute berasal dari planner; hasil tidak dipaksakan untuk selalu berhasil. Denah baru dapat mengubah exit terpilih, waktu tiba, jumlah reroute, maupun kejadian yang sempat dialami.
 
-## Integritas map
+Scene demo lama memakai `ScenarioRunner` dengan timeline dan restart berbeda; skrip tersebut bukan pengendali scene penelitian ini. Timeline aktif ada di `MiningSimulation.RunTimeline()`.
 
-`MineLayout.CreateCells()` menjadi sumber tunggal denah, geometri lantai, dinding, atap, planner, dan minimap. Lantai antar sel sedikit bertumpuk untuk menutup garis sambungan; dinding hanya dibuat di batas luar. Sampel mesh atap dan dinding menggunakan koordinat dunia yang sama di setiap sambungan. Tidak ada platform tersembunyi yang memungkinkan berjalan di luar tambang.
+## Dokumentasi tanpa Play
 
-Struktur runtime terpisah menjadi UI, logika simulasi, lingkungan, dan terrain/collision. Collider lantai, dinding batu, penyangga, serta longsor menjaga gerakan tetap di lorong. Minimap digambar dari denah yang sama sehingga atap tidak menutupi jalur.
+Hierarchy **EDITOR PREVIEW | Documentation (excluded from Play)** menyimpan map, pekerja, dan kamera. Pilih root tersebut untuk tombol **Seluruh map / atap terbuka**, **Sudut kamera cerita**, contoh longsor, dan ekspor PNG 1920 x 1080. Resource hasil generator berada di `Assets/Generated/MiningDocumentation/PreviewResources.asset`.
 
-## Evaluasi
+Setelah mengubah Corridors, gunakan **Rebuild Editor Preview** dan simpan scene. Rebuild memakai pengaturan komponen simulasi pada scene yang sama. Menggeser objek pratinjau secara manual tidak mengubah denah runtime. Rebuild mengganti hierarchy/resource hasil generator.
 
-Untuk perbandingan yang konsisten, jalankan **Mode Cerita + Adaptif**, ekspor CSV dari panel hasil, lalu ulangi **Mode Cerita + Statis** dari menu. Jangan membandingkan waktu sukses adaptif dengan waktu baseline yang terhenti seolah keduanya berhasil; periksa kolom `outcome`. FPP memiliki variasi keputusan dan kecepatan pemain sehingga perlu dilaporkan sebagai uji interaksi terpisah.
+Pratinjau dinonaktifkan sebelum runtime membuat map dan diberi tag `EditorOnly`. PNG pratinjau tidak memuat HUD atau label Gizmos. Kamera seluruh map menyesuaikan batas denah; minimap runtime juga menyesuaikan rentang sel. Kamera FPP editor tetap tersedia sebagai sudut dokumentasi lama, bukan mode simulasi penelitian.
 
-CSV berada di `Application.persistentDataPath/Evaluasi`; lokasi lengkap ditampilkan setelah menekan **Ekspor hasil evaluasi (.csv)**. File summary mencatat mode, navigasi, hasil, waktu, jarak, paparan, kontak bahaya, reroute dan respons hitung maksimum. File events mencatat timeline perubahan bahaya/rute.
+## Evaluasi dan ekspor
 
-Paparan adalah durasi dalam radius 4,5 m dari pusat longsor aktif, bukan estimasi cedera atau keselamatan tambang nyata. Waktu respons adalah waktu komputasi planner lokal dengan Stopwatch, bukan latensi WebSocket atau pengukuran sensor. Semua metrik dihasilkan dari sesi berjalan; tidak ada angka hasil penelitian yang ditanam sebelumnya.
+Jalankan **Cerita + Adaptif**, ekspor hasil, lalu **Cerita + Statis** pada konfigurasi sama. Gunakan outcome sebagai pembanding utama; waktu berhenti baseline bukan waktu evakuasi berhasil. Rincian protokol, skenario kontrol, dan rumusan jawaban penelitian ada di [dokumen update](UPDATE_RESEARCH_2026-09-23.md).
+
+Ekspor tersimpan pada `Application.persistentDataPath/Evaluasi` dan lokasi lengkap tampil di panel. Setiap ekspor menghasilkan tiga file dengan awalan waktu UTC, mode, dan navigasi yang sama:
+
+| File | Isi |
+|---|---|
+| `_summary.csv` | Mode, navigasi, outcome, waktu, jarak, paparan, kontak, reroute, respons hitung maksimum |
+| `_events.csv` | Waktu kejadian, perubahan bahaya/rute, hasil akhir |
+| `_layout.csv` | Koordinat seluruh sel denah runtime untuk mencocokkan pasangan percobaan |
+
+`elapsed_s` mencakup briefing tetapi tidak bertambah ketika jeda. Nilainya memakai delta waktu simulasi yang dibatasi 0,05 detik/frame, sehingga tidak selalu sama dengan waktu dinding pada frame rate rendah. `distance_m` adalah akumulasi perpindahan horizontal aktor.
+
+`exposure_s` menghitung durasi dalam radius 4,5 m dari pusat longsor berstatus tertutup. `hazard_contacts` menghitung masuknya aktor ke perimeter tersebut dan kejadian longsor tepat di sel aktor; ini bukan hitungan benturan fisika atau prediksi cedera. `reroutes` bertambah ketika pembaruan bahaya mengubah target exit atau membuat rute lama melintasi sel tertutup; bukan jumlah seluruh panggilan BFS.
+
+`max_planning_ms` merupakan waktu maksimum komputasi lokal pada pembaruan bahaya, termasuk peringatan. Pengukuran mencakup pencarian dan penyesuaian rute dengan Stopwatch, bukan latensi sensor, WebSocket, rendering, atau perangkat edge fisik. Ekspor saat Paused/Running/Menu bukan hasil akhir; gunakan hanya `Success`/`Blocked` untuk membandingkan hasil akhir.
 
 ## WebSocket opsional
 
-Komponen `MiningTelemetry` pada root scene menyediakan `endpoint` dan `connectOnStart`. Default tidak menghubungkan jaringan. Untuk demonstrasi lokal, jalankan:
+`MiningTelemetry` menyediakan `endpoint` dan `connectOnStart`, default offline. Demonstrasi lokal:
 
 ```powershell
 python Tools/telemetry_server.py
 ```
 
-Server contoh membutuhkan paket Python `websockets` (`python -m pip install websockets` jika belum tersedia). Aktifkan `connectOnStart` di Inspector sebelum Play, atau saat Play pilih context menu komponen **Connect WebSocket**. Endpoint default `ws://127.0.0.1:8765`. Adapter mengirim snapshot setiap 0,5 detik; perintah diterapkan hanya saat sesi berjalan.
-
-Contoh perintah:
+Server membutuhkan Python `websockets`. Aktifkan `connectOnStart` sebelum Play atau gunakan context menu komponen **Connect WebSocket** saat Play. Endpoint default `ws://127.0.0.1:8765`. Snapshot dikirim setiap 0,5 detik; perintah diterapkan hanya saat sesi Running.
 
 ```json
 {"type":"hazard","index":2,"level":2}
 ```
 
-`index`: 0 pusat, 1 barat, 2 timur; `level`: 0 normal, 1 waspada, 2 tertutup. Gunakan level 0 hanya untuk menguji pembaruan kondisi secara eksplisit. Server contoh hanya mencatat data secara default; opsi `--demo-hazard` mengirim penutupan timur setelah menerima snapshot waktu ≥30 detik. Timeline bawaan tetap berjalan.
+Index 0/1/2 = pusat/barat/timur; level 0/1/2 = normal/waspada/tertutup. Level 0 membuka kembali lokasi secara eksplisit. Server hanya mencatat data secara default; `--demo-hazard` menutup timur setelah snapshot waktu >=30 detik. Timeline bawaan tetap aktif. Untuk pasangan eksperimen, gunakan input jaringan yang sama atau nonaktifkan koneksi.
 
 ## Validasi pengembang
 
-Menu dan skrip editor `MiningExperienceValidation` mencakup seluruh kombinasi tiga bahaya, validitas rute, sambungan collision, cerita adaptif, baseline, FPP, jeda, restart, dan ekspor. Jalankan hanya di salinan proyek pengujian karena metode batch menutup editor setelah selesai:
+`MiningExperienceValidation` menguji graf, konfigurasi koridor, geometri/collision, cerita adaptif, baseline statis, pembatasan Story, jeda, reset, ekspor, dan hasil tanpa rute. Jalankan di salinan proyek karena runner menutup editor dan mengubah pengaturan Play untuk pengujian:
 
 ```powershell
 Unity.exe -batchmode -nographics -projectPath "PATH_SALINAN_PROYEK" -executeMethod MiningExperienceValidation.RunBatch -logFile validation.log
 ```
 
-Hasil ditulis ke `Validation/results.txt` dalam proyek pengujian. Validasi ini memeriksa model map dan gameplay; inspeksi visual serta kenyamanan kontrol tetap memerlukan Game View.
+Hasil berada di `Validation/results.txt` pada salinan pengujian. Log lama `final-gameplay.txt`, `websocket-and-gameplay.txt`, dan `editor-preview.txt` merupakan bukti versi sebelumnya, bukan pengujian terbaru. Uji batch tanpa grafis tidak memverifikasi tampilan visual menu/kamera.

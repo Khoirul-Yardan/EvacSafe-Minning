@@ -66,7 +66,7 @@ namespace SafeMining
                 catch (Exception e) { Debug.LogWarning("Invalid telemetry command: " + e.Message); }
             }
             if (pendingSend != null && pendingSend.IsFaulted) { Status = "Send failed"; _ = pendingSend.Exception; pendingSend = null; }
-            if (socket == null || socket.State != WebSocketState.Open || Simulation == null || Time.unscaledTime < nextSend || (pendingSend != null && !pendingSend.IsCompleted)) return;
+            if (socket == null || socket.State != WebSocketState.Open || Simulation == null || Simulation.Actor == null || Time.unscaledTime < nextSend || (pendingSend != null && !pendingSend.IsCompleted)) return;
             nextSend = Time.unscaledTime + .5f;
             var s = Simulation;
             var snapshot = new Snapshot { mode = s.Mode.ToString(), navigation = s.Adaptive ? "adaptive" : "static", state = s.State.ToString(), simulationTime = s.Elapsed,
