@@ -33,11 +33,24 @@ namespace SafeMining
         [Min(2)] public float secondsBetweenEvents = 6;
         [Min(2)] public float warningDurationSeconds = 4;
         [Min(0)] public float warningRiskPenalty = 24;
+        [Header("Sumber bahaya: getaran lingkungan, bukan trigger posisi pemain")]
+        public HazardSource hazardSource = HazardSource.MqttEdgeSimulation;
+        public MiningEdgeSettings edgeSettings = new MiningEdgeSettings();
+        public MiningMqttSettings mqttSettings = new MiningMqttSettings();
+        public HazardSource ActiveHazardSource { get; private set; }
+        public MiningEdgeSession EdgeSession { get; private set; }
+        string edgeError;
         public int ActiveSeed { get; private set; }
         public HazardScenarioMode ActiveScenario { get; private set; }
         public List<Vector2Int> HazardSites { get; private set; } = new List<Vector2Int>();
         public List<ScheduledRockfall> Schedule { get; private set; } = new List<ScheduledRockfall>();
-        public string LastDetectorAlert { get; private set; } = "Detektor aktif - kondisi normal";
+        string detectorAlert = "Detektor aktif - kondisi normal";
+        public string LastDetectorAlert
+        {
+            get => (edgeError ?? EdgeSession?.TransportStatus ??
+                (hazardSource == HazardSource.LegacyTimeline ? "JADWAL LEGACY" : hazardSource == HazardSource.LocalEdgeSimulation ? "EDGE LOKAL / tanpa MQTT" : "MQTT / mulai sesi untuk menghubungkan")) + "\n" + detectorAlert;
+            private set => detectorAlert = value;
+        }
         public MiningLandslideDetector[] Detectors { get; private set; }
         public MiningMode Mode { get; private set; }
         public SessionState State { get; private set; } = SessionState.Menu;
@@ -260,6 +273,8 @@ namespace SafeMining
         public void Begin(MiningMode mode, bool adaptive)
         {
             if (Actor == null) return;
+            EdgeSession?.Dispose(); EdgeSession = null; edgeError = null;
+            ActiveHazardSource = hazardSource;
             Mode = mode; Adaptive = adaptive; State = SessionState.Running;
             Elapsed = Travelled = Exposure = ResponseMs = MaxResponseMs = 0; Reroutes = HazardContacts = 0;
             pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
@@ -278,7 +293,25 @@ namespace SafeMining
             Dialogue = mode == MiningMode.Story
                 ? "Tim: Kita berada di galeri produksi. Amati detektor kuning di dinding. Lampu kuning berarti waspada; merah berarti jalur tertutup."
                 : "Tim: Ikuti penunjuk ke zona aman. WASD untuk bergerak, mouse untuk melihat. Hindari detektor kuning dan lorong merah.";
-            Plan(false); LogEvent("start", mode + "/" + (adaptive ? "adaptive" : "static")); SetCursor(); UpdateCamera(true);
+            if (ActiveHazardSource != HazardSource.LegacyTimeline)
+            {
+                try
+                {
+                    EdgeSession = new MiningEdgeSession(ActiveHazardSource, ActiveSeed, Schedule, Cells, HazardSites,
+                        edgeSettings, mqttSettings, (index, level) =>
+                        {
+                            bool changed = HazardLevels[index] != level;
+                            ApplyHazard(index, level);
+                            if (changed && Adaptive) EdgeSession.TraceRoute(TargetExit, ResponseMs);
+                        });
+                }
+                catch (Exception e)
+                {
+                    State = SessionState.Blocked; edgeError = "Konfigurasi edge gagal";
+                    Dialogue = e.Message; Debug.LogError(Dialogue, this); SetCursor(); return;
+                }
+            }
+            Plan(false); LogEvent("start", mode + "/" + (adaptive ? "adaptive" : "static") + "/" + ActiveHazardSource); SetCursor(); UpdateCamera(true);
         }
 
         public void TogglePause()
@@ -287,7 +320,7 @@ namespace SafeMining
             else if (State == SessionState.Paused) State = SessionState.Running;
             SetCursor();
         }
-        public void Menu() { State = SessionState.Menu; workerVisual.gameObject.SetActive(true); headlamp.enabled = true; SetCursor(); }
+        public void Menu() { State = SessionState.Menu; EdgeSession?.Dispose(); workerVisual.gameObject.SetActive(true); headlamp.enabled = true; SetCursor(); }
         public void ToggleGlasses()
         {
             if (Mode == MiningMode.FirstPerson && State == SessionState.Running) GlassesEnabled = !GlassesEnabled;
@@ -308,10 +341,15 @@ namespace SafeMining
                 if (keyboard.gKey.wasPressedThisFrame) ToggleGlasses();
                 if (keyboard.fKey.wasPressedThisFrame) ToggleHeadlamp();
             }
-            if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
+            if (State != SessionState.Running)
+            {
+                EdgeSession?.Pump(false, State == SessionState.Paused, Elapsed, () => State == SessionState.Running);
+                UpdateCamera(false); UpdateArrows(); return;
+            }
             float dt = Mathf.Min(Time.deltaTime, .05f);
             Elapsed += dt;
-            RunTimeline();
+            if (ActiveHazardSource == HazardSource.LegacyTimeline) RunTimeline();
+            else EdgeSession?.Pump(true, false, Elapsed, () => State == SessionState.Running);
             if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
             if (Mode == MiningMode.Story) MoveStory(dt); else MovePlayer(dt);
             if (body.isGrounded) gravityVelocity = -2; else gravityVelocity -= 20 * dt;
@@ -353,12 +391,19 @@ namespace SafeMining
 
         public void SetHazard(int index, int level)
         {
+            // Compatibility entry point for the old timeline/WebSocket only.
+            if (ActiveHazardSource != HazardSource.LegacyTimeline || State != SessionState.Running) return;
+            ApplyHazard(index, level);
+        }
+
+        void ApplyHazard(int index, int level)
+        {
             if (index < 0 || index >= HazardLevels.Length || level < 0 || level > 2 || HazardLevels[index] == level) return;
             HazardLevels[index] = level;
             if (level == 2) Blocked.Add(HazardSites[index]); else Blocked.Remove(HazardSites[index]);
             rubble[index].SetActive(level == 2); Detectors[index].SetLevel(level);
             string station = "D" + (index + 1).ToString("00");
-            LastDetectorAlert = station + " | " + (level == 0 ? "NORMAL" : level == 1 ? "AWAS LONGSOR - lampu kuning" : "JALUR TERTUTUP - lampu merah") +
+            LastDetectorAlert = station + " | " + (level == 0 ? "NORMAL" : level == 1 ? "WASPADA" : "TERTUTUP") +
                 " | grid " + HazardSites[index].x + ":" + HazardSites[index].y;
             Phase = level == 2 ? "Longsor / " + station : level == 1 ? "Peringatan / " + station : "Pembaruan / " + station;
             Dialogue = "Detektor " + station + (level == 1 ? ": getaran meningkat. Periksa lampu dan sirene di lorong." :
@@ -527,6 +572,10 @@ namespace SafeMining
             public Vector2Int[] exits = MineLayout.Exits;
             public Vector2Int[] detectorSites;
             public ScheduledRockfall[] schedule;
+            public string hazardSource, sessionId, layoutId, scheduleSemantics;
+            public MiningEdgeSettings edge;
+            public MiningMqttSettings broker;
+            public bool edgeDataLoss, edgeHadDisconnect, edgeDataStale;
         }
         public void Export()
         {
@@ -540,19 +589,26 @@ namespace SafeMining
                 foreach (var cell in layout) layoutRows.Add(cell.x + "," + cell.y);
                 File.WriteAllText(prefix + "_layout.csv", string.Join("\n", layoutRows));
                 File.WriteAllText(prefix + "_events.csv", "simulation_time_s,event,detail,reroutes,planning_ms\n" + string.Join("\n", eventRows));
-                File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms,scenario,seed\n" +
-                    string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4},{9},{10}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs, ActiveScenario, ActiveSeed));
+                File.WriteAllText(prefix + "_summary.csv", "mode,navigation,outcome,elapsed_s,distance_m,exposure_s,hazard_contacts,reroutes,max_planning_ms,scenario,seed,hazard_source,session_id,data_loss,had_disconnect,data_stale\n" +
+                    string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3},{5:F3},{6},{7},{8:F4},{9},{10},{11},{12},{13},{14},{15}\n", Mode, Adaptive ? "adaptive" : "static", State, Elapsed, Travelled, Exposure, HazardContacts, Reroutes, MaxResponseMs, ActiveScenario, ActiveSeed,
+                        ActiveHazardSource, EdgeSession?.SessionId, EdgeSession?.DataLoss ?? false, EdgeSession?.HadDisconnect ?? false, EdgeSession?.DataStale ?? false));
                 var scheduleRows = new List<string> { "detector_index,cell_x,cell_z,warning_s,collapse_s" };
                 foreach (var item in Schedule)
                     scheduleRows.Add(string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3:F3},{4:F3}", item.detectorIndex,
                         HazardSites[item.detectorIndex].x, HazardSites[item.detectorIndex].y, item.warningTime, item.collapseTime));
                 File.WriteAllText(prefix + "_scenario.csv", string.Join("\n", scheduleRows));
                 File.WriteAllText(prefix + "_config.json", JsonUtility.ToJson(new ExperimentConfig {
+                    hazardSource = ActiveHazardSource.ToString(), sessionId = EdgeSession?.SessionId, layoutId = EdgeSession?.LayoutId,
+                    scheduleSemantics = ActiveHazardSource == HazardSource.LegacyTimeline ? "direct_hazard_times" : "vibration_profile_onsets",
+                    edge = EdgeSession?.Settings, broker = EdgeSession?.Broker,
+                    edgeDataLoss = EdgeSession?.DataLoss ?? false, edgeHadDisconnect = EdgeSession?.HadDisconnect ?? false,
+                    edgeDataStale = EdgeSession?.DataStale ?? false,
                     seed = ActiveSeed, scenario = ActiveScenario.ToString(), warningRiskPenalty = activeWarningPenalty,
                     mode = Mode.ToString(), fppWalkSpeed = walkSpeed, fppSprintSpeed = sprintSpeed,
                     detectorSites = HazardSites.ToArray(), schedule = Schedule.ToArray(),
                     unityVersion = Application.unityVersion, planner = "Dijkstra_distance_plus_warning_penalty_v1"
                 }, true));
+                EdgeSession?.Export(prefix);
                 ExportStatus = "CSV tersimpan: " + directory; Debug.Log(ExportStatus);
             }
             catch (Exception e) { ExportStatus = "Ekspor gagal: " + e.Message; Debug.LogWarning(ExportStatus); }
@@ -563,12 +619,22 @@ namespace SafeMining
         }
         void OnDestroy()
         {
+            EdgeSession?.Dispose();
             if (visualProfile != null)
             {
                 foreach (var component in visualProfile.components) Destroy(component);
                 Destroy(visualProfile);
             }
             if (Application.isPlaying) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+        }
+        void OnDisable()
+        {
+            EdgeSession?.Dispose();
+            if (State == SessionState.Running || State == SessionState.Paused)
+            {
+                State = SessionState.Blocked; Dialogue = "Sesi dihentikan karena simulasi dinonaktifkan. Tekan R untuk mengulang.";
+                SetCursor();
+            }
         }
     }
 }

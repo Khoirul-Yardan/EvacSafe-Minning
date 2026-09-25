@@ -1,6 +1,16 @@
 # SAFE-MINING EVAC
 
-Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP manual**, longsor acak, jaringan detektor visual, serta navigasi **adaptif** dan **statis**. Pembaruan: 24 September 2026.
+Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP manual**, getaran virtual, keputusan edge, MQTT, serta navigasi **adaptif** dan **statis**. Pembaruan: 25 September 2026.
+
+Alur bawaan: **getaran lingkungan → edge virtual → broker MQTT → Unity → bahaya dan navigasi**. Sensor tidak dipicu spawn point atau kedekatan pemain. Implementasi ini mencakup pekerjaan Orang 1; cutscene Orang 2 tidak ditambahkan. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
+
+Jalankan broker lokal sebelum memulai mode MQTT (Docker Desktop harus aktif):
+
+```powershell
+docker compose -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d
+```
+
+Tanpa broker, pilih `LocalEdgeSimulation` pada `MiningSimulation > Hazard Source` sebelum memulai. Mode MQTT tidak berpindah otomatis ke lokal ketika terputus. `LegacyTimeline` tersedia untuk pembanding jadwal lama.
 
 1. Buka `Assets/Scenes/SafeMining_Experience.unity` di Unity 6000.3.23f1.
 2. Tekan **Play**, pilih navigasi dan skenario, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**.

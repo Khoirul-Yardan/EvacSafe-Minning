@@ -1,5 +1,7 @@
 # Update simulasi dan penjelasan research problem
 
+> Pembaruan 25 September 2026: sumber bawaan scene utama kini getaran ? edge virtual ? MQTT, tanpa trigger posisi/spawn pemain. Keterangan timeline/WebSocket/sensor tanpa pengolahan pada dokumen ini menjelaskan baseline sebelumnya. Implementasi terkini, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
+
 **Arsip tahap sebelumnya.** Implementasi terbaru memakai longsor acak, detektor virtual, dan biaya risiko. Lihat [audit full paper dan update terbaru](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md). Hasil/fitur dalam dokumen ini menggambarkan versi sebelum penambahan tersebut.
 
 Tanggal: 23 September 2026. Acuan pemeriksaan: kode scene `SafeMining_Experience.unity`, generator, planner, UI, dan runner validasi dalam repositori ini. Rumusan penelitian di bawah merupakan rumusan operasional berdasarkan implementasi, bukan kutipan verbatim abstrak.

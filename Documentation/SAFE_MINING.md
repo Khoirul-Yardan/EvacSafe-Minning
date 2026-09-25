@@ -1,5 +1,7 @@
 # SAFE-MINING EVAC - panduan Mode Cerita dan FPP
 
+> Pembaruan 25 September 2026: sumber bawaan scene utama kini getaran ? edge virtual ? MQTT, tanpa trigger posisi/spawn pemain. Keterangan timeline/WebSocket/sensor tanpa pengolahan pada dokumen ini menjelaskan baseline sebelumnya. Implementasi terkini, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
+
 Pembaruan 24 September 2026: **Mode FPP manual** kembali tersedia bersama **Mode Cerita otomatis**, dengan navigasi **adaptif** atau **statis** pada denah dan kejadian yang sama. [Panduan FPP dan visual](FPP_AND_VISUALS.md) menjelaskan kontrol serta pengaturan baru. [Audit penelitian 23 September](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md) menjelaskan dasar perbandingan eksperimen Cerita dan batas klaim.
 
 ## Menjalankan simulasi

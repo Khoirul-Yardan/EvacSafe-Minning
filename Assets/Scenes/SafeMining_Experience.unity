@@ -3712,6 +3712,22 @@ MonoBehaviour:
   secondsBetweenEvents: 6
   warningDurationSeconds: 4
   warningRiskPenalty: 24
+  hazardSource: 2
+  edgeSettings:
+    sampleInterval: 0.05
+    warningThreshold: 0.45
+    dangerThreshold: 0.75
+    clearThreshold: 0.3
+    minimumDuration: 0.5
+    clearDuration: 1
+    normalIntensity: 0.12
+    warningIntensity: 0.58
+    dangerIntensity: 0.9
+    noiseAmplitude: 0.04
+    dangerPulseSeconds: 2
+  mqttSettings:
+    host: 127.0.0.1
+    port: 1883
 --- !u!4 &79860707
 Transform:
   m_ObjectHideFlags: 0

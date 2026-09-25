@@ -64,7 +64,7 @@ namespace SafeMining
         {
             while (messages.TryDequeue(out string json))
             {
-                try { var command = JsonUtility.FromJson<Command>(json); if (command != null && command.type == "hazard" && Simulation.State == SessionState.Running) Simulation.SetHazard(command.index, command.level); }
+                try { var command = JsonUtility.FromJson<Command>(json); if (command != null && command.type == "hazard" && Simulation != null && Simulation.ActiveHazardSource == HazardSource.LegacyTimeline && Simulation.State == SessionState.Running) Simulation.SetHazard(command.index, command.level); }
                 catch (Exception e) { Debug.LogWarning("Invalid telemetry command: " + e.Message); }
             }
             if (pendingSend != null && pendingSend.IsFaulted) { Status = "Send failed"; _ = pendingSend.Exception; pendingSend = null; }

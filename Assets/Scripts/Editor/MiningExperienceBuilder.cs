@@ -190,6 +190,8 @@ public static class MiningExperienceValidation
             frames++;
             if (phase == 0 && frames > 5)
             {
+                // This runner preserves the timeline baseline; MiningEdgeValidation covers the new sources.
+                simulation.hazardSource = HazardSource.LegacyTimeline;
                 var documentation = MiningDocumentationPreview.Find(simulation.gameObject.scene);
                 if (documentation != null)
                 {

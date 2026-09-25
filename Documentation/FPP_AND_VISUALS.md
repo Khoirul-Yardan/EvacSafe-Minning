@@ -1,5 +1,7 @@
 # FPP dan tampilan tambang — 24 September 2026
 
+> Pembaruan 25 September 2026: sumber bawaan scene utama kini getaran ? edge virtual ? MQTT, tanpa trigger posisi/spawn pemain. Keterangan timeline/WebSocket/sensor tanpa pengolahan pada dokumen ini menjelaskan baseline sebelumnya. Implementasi terkini, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
+
 Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan Play, lalu pilih **Mulai Mode FPP**. Mode Cerita tetap tersedia untuk evakuasi otomatis. Pilihan navigasi adaptif/statis dan skenario berlaku untuk kedua mode.
 
 | Kontrol FPP | Fungsi |

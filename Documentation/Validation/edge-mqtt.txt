@@ -1,0 +1,19 @@
+25 September 2026 - Unity 6000.3.23f1, Windows Editor batchmode/nographics.
+Broker: Eclipse Mosquitto 2.0.22 in Docker, localhost:1883.
+Runner: MiningEdgeValidation.RunBatch, isolated .tools/ValidationProject.
+
+PASS edge: short spike rejected, sustained warning/danger, hysteresis, stable clear, closure latch.
+PASS deterministic input: 32 seeds, all devices; decision times identical at 0.01 s and 0.2 s frame steps.
+PASS contract: missing fields, foreign session/layout/device, duplicate/order, invalid level/value/time/event, closure downgrade rejected.
+PASS local integration: idle distant FPP detects vibration, closes D01, updates route; direct SetHazard blocked.
+PASS pause/reset/proximity: clock frozen, new session clears closure, standing at a normal detector triggers nothing.
+PASS story comparison: adaptive reaches refuge; static stops at closure with zero reroutes.
+PASS Mosquitto: real QoS 1 publish/subscribe returns decisions, applies closure and reroute to idle FPP.
+PASS MQTT pause/resume: incoming decision waits until resume; malformed JSON and duplicate rejected.
+PASS MQTT reconnect: socket failure detected, broker reconnected, snapshots republished, closure preserved, full trace exported.
+PASS unavailable broker: edge decisions continue, no local fallback, no hazard applied, data marked stale.
+PASS bounded queue: >256 messages during pause marks data loss, resume cannot apply, reset required.
+ALL EDGE/MQTT CHECKS PASSED
+Scope: virtual sensor/edge and a real local MQTT broker. No physical sensor/device or standalone/WebGL build validation.
+Headless run does not verify HUD appearance or visual cutscenes. Existing Unity SearchDatabase startup exception appeared; the feature runners completed.
+JSON lexical checks additionally reject duplicate fields, wrong primitive types, fractional/overflow integer fields, trailing commas/text.

@@ -1,5 +1,7 @@
 # Kesesuaian paper, longsor acak, dan perangkat deteksi
 
+> Pembaruan 25 September 2026: sumber bawaan scene utama kini getaran ? edge virtual ? MQTT, tanpa trigger posisi/spawn pemain. Keterangan timeline/WebSocket/sensor tanpa pengolahan pada dokumen ini menjelaskan baseline sebelumnya. Implementasi terkini, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
+
 Pembaruan 23 September 2026. Dokumen ini menggantikan keterangan tentang tiga lokasi bahaya tetap, timeline tunggal, dan BFS tanpa bobot pada update sebelumnya.
 
 ## Acuan yang diperiksa
