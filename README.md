@@ -1,10 +1,13 @@
 # SAFE-MINING EVAC
 
-Simulasi evakuasi tambang Unity dalam **Mode Cerita otomatis**, dengan longsor acak, jaringan detektor visual, dan pembanding navigasi **adaptif** dan **statis**. Pembaruan: 23 September 2026.
+Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP manual**, longsor acak, jaringan detektor visual, serta navigasi **adaptif** dan **statis**. Pembaruan: 24 September 2026.
 
 1. Buka `Assets/Scenes/SafeMining_Experience.unity` di Unity 6000.3.23f1.
-2. Tekan **Play**, pilih navigasi adaptif atau statis dan jenis skenario, lalu **Mulai Mode Cerita**.
-3. **Esc** untuk jeda/lanjut; **R** untuk mengulang seed yang sama. Pilih **Acak skenario baru** di menu untuk kejadian lain. Pekerja bergerak otomatis.
+2. Tekan **Play**, pilih navigasi dan skenario, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**.
+3. FPP: **WASD** bergerak, **mouse** melihat, **Shift** berlari, **F** lampu helm, **G** kacamata navigasi. Cerita: pekerja bergerak otomatis.
+4. **Esc** untuk jeda/lanjut dan mengatur sensitivitas mouse, FOV, serta ayunan kamera. **R** mengulang mode dan seed yang sama. Pilih **Acak skenario baru** di menu untuk kejadian lain.
+
+Tampilan tambang menggunakan material batu, kerikil, kayu, dan besi dengan normal map serta variasi kekasaran, lampu kerja hangat, lampu helm berbayang, dan warna HUD yang lebih netral. Pengaturan kamera dan kecepatan FPP tersedia di Inspector `MiningSimulation`. Lihat [panduan FPP dan visual](Documentation/FPP_AND_VISUALS.md).
 
 Tunnel dibangun secara **prosedural deterministik**. Denah kini dapat diubah melalui daftar **Corridors** pada komponen `MiningSimulation` sebelum Play. Status longsor dan rute adaptif berubah saat simulasi berjalan. Topologi tidak diacak atau dibangun ulang di tengah sesi.
 
@@ -18,4 +21,4 @@ Aset alat deteksi: `Assets/Resources/Mining/LandslideDetector.prefab`, dipasang 
 
 [Hasil validasi longsor acak dan detektor](Documentation/Validation/random-detectors.txt)
 
-Scene `SafeMiningEvac_Demo.unity` adalah demo lama dengan alur berbeda. Gunakan `SafeMining_Experience.unity` untuk penelitian terbaru. Gambar FPP dan log validasi lama merupakan arsip. Gambar terbaru tersedia di `Documentation/Previews/random-menu.png`, `detector-warning.png`, dan `random-story.png`.
+Scene `SafeMiningEvac_Demo.unity` adalah demo lama dengan alur berbeda. Gunakan `SafeMining_Experience.unity`. Dokumen audit 23 September menggambarkan versi Cerita saat itu; FPP kini tersedia untuk latihan manual. Hasil FPP dan Cerita dibedakan dalam ekspor evaluasi.

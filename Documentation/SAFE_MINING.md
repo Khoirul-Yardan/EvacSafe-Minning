@@ -1,21 +1,23 @@
-# SAFE-MINING EVAC - panduan Mode Cerita
+# SAFE-MINING EVAC - panduan Mode Cerita dan FPP
 
-Pembaruan 23 September 2026, termasuk longsor acak dan perangkat deteksi. [Audit full paper dan detail mekanisme terbaru](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md) menjadi acuan implementasi saat ini. Simulasi penelitian menggunakan **Mode Cerita otomatis**, dengan navigasi **adaptif** atau **statis** pada denah dan kejadian yang sama. [Audit dan penjelasan research problem](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md) menjelaskan dasar perbandingan dan batas klaim.
+Pembaruan 24 September 2026: **Mode FPP manual** kembali tersedia bersama **Mode Cerita otomatis**, dengan navigasi **adaptif** atau **statis** pada denah dan kejadian yang sama. [Panduan FPP dan visual](FPP_AND_VISUALS.md) menjelaskan kontrol serta pengaturan baru. [Audit penelitian 23 September](PAPER_ALIGNMENT_AND_RANDOM_HAZARDS.md) menjelaskan dasar perbandingan eksperimen Cerita dan batas klaim.
 
 ## Menjalankan simulasi
 
-Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan **Play**, pilih jenis navigasi, lalu **Mulai Mode Cerita**. Menu editor: **SafeMining > Open Story Experience**.
+Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan **Play**, pilih jenis navigasi, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**. Menu editor: **SafeMining > Open Story Experience** membuka scene yang memuat kedua mode.
 
 | Kontrol | Fungsi |
 |---|---|
 | Esc | Jeda / lanjut |
-| R | Mengulang cerita dengan jenis navigasi dan seed yang sama |
+| R | Mengulang mode aktif dengan jenis navigasi dan seed yang sama |
+| WASD / mouse | Bergerak / melihat dalam FPP |
+| Shift / F / G | Lari / lampu helm / kacamata AR dalam FPP |
 | Acak skenario baru (menu) | Memilih seed baru untuk sesi selanjutnya |
 | Jenis: Acak / Tetap / Tanpa bahaya (menu) | Memilih skenario Random, Scripted, atau NoHazards |
 | Menu simulasi pada panel hasil/jeda | Kembali untuk memilih adaptif atau statis |
 | Ekspor hasil evaluasi (.csv) | Menyimpan data sesi saat ini |
 
-Pekerja berjalan otomatis, kamera mengikuti dari belakang, dan dialog tim menerangkan perubahan kondisi. Tidak ada pilihan FPP atau pergantian mode melalui Tab. Enum dan fungsi internal FPP lama masih ada untuk kompatibilitas, tetapi `Begin(...)` selalu memulai Story. Kamera dokumentasi FPP yang tersimpan hanya merupakan sudut pratinjau editor.
+Dalam Cerita, pekerja berjalan otomatis dan kamera mengikuti dari belakang. Dalam FPP, pemain bergerak sendiri pada ketinggian mata pekerja. Detektor, longsor, collision, navigasi, minimap, dan hasil evakuasi berlaku untuk keduanya. Gunakan menu jeda untuk mengatur sensitivitas, FOV, dan ayunan kamera. Kembali ke menu untuk memilih mode lain; setiap peluncuran memulai sesi baru.
 
 ## Mengubah tunnel tanpa mengedit kode
 
@@ -79,7 +81,7 @@ Hierarchy **EDITOR PREVIEW | Documentation (excluded from Play)** menyimpan map,
 
 Setelah mengubah Corridors, gunakan **Rebuild Editor Preview** dan simpan scene. Rebuild memakai pengaturan komponen simulasi pada scene yang sama. Menggeser objek pratinjau secara manual tidak mengubah denah runtime. Rebuild mengganti hierarchy/resource hasil generator.
 
-Pratinjau dinonaktifkan sebelum runtime membuat map dan diberi tag `EditorOnly`. PNG pratinjau tidak memuat HUD atau label Gizmos. Kamera seluruh map menyesuaikan batas denah; minimap runtime juga menyesuaikan rentang sel. Kamera FPP editor tetap tersedia sebagai sudut dokumentasi lama, bukan mode simulasi penelitian.
+Pratinjau dinonaktifkan sebelum runtime membuat map dan diberi tag `EditorOnly`. PNG pratinjau tidak memuat HUD atau label Gizmos. Kamera seluruh map menyesuaikan batas denah; minimap runtime juga menyesuaikan rentang sel. Kamera FPP editor adalah sudut dokumentasi; gunakan **Mulai Mode FPP** saat Play untuk kontrol manual.
 
 ## Evaluasi dan ekspor
 

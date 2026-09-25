@@ -1,0 +1,23 @@
+PASS configurable layout: topology changes; diagonal, disconnected and empty layouts rejected.
+PASS graph: 524 origin/hazard combinations; blocked-route failure is safe.
+PASS random scenarios: 64 seeds replay identically, varied sites/times, distinct events, protected spawn/exits, warning before collapse.
+PASS risk planner: warning penalty changes route before closure; no-hazard control has empty schedule.
+PASS editor preview disabled before Play; EditorOnly hierarchy excluded from builds.
+PASS geometry: 67 floor/roof cells, 152 open connections (3 lanes each), 116 sealed boundaries.
+PASS FPP: menu launch, eye camera, idle/manual movement, F/G equipment, Escape/pause freeze, resume/reset, collision, adaptive replan, refuge success, CSV and static baseline.
+PASS adaptive story: success, 2 reroutes, 37.7 s, exposure 0
+PASS static baseline: stops before landslide, zero reroutes.
+PASS story: routes from actor position, pause/resume, refuge completion.
+PASS CSV export and independent session reset.
+PASS worker collision: capsule cannot cross exterior wall.
+PASS no-route story: terminal Blocked outcome, empty route.
+PASS seeded story: seed 101, adaptive, Success, reroutes 1, 37.4 s.
+PASS seeded story: seed 101, static, Blocked, reroutes 0, 19.7 s.
+PASS seeded story: seed 102, adaptive, Success, reroutes 2, 37.4 s.
+PASS seeded story: seed 102, static, Blocked, reroutes 0, 19.7 s.
+PASS seeded story: seed 103, adaptive, Success, reroutes 2, 43.4 s.
+PASS seeded story: seed 103, static, Blocked, reroutes 0, 26.1 s.
+PASS seeded story: seed 104, adaptive, Success, reroutes 1, 37.4 s.
+PASS seeded story: seed 104, static, Blocked, reroutes 0, 19.7 s.
+PASS random gameplay: four paired seeds, matching schedules, detector states, terminal outcomes and no closed adaptive route.
+All checks passed

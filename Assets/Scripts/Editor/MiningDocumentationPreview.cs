@@ -159,7 +159,8 @@ public static class MiningDocumentationPreview
             foreach (var material in renderer.sharedMaterials)
             {
                 if (material == null) continue;
-                Save(material.mainTexture); Save(material);
+                foreach (var property in material.GetTexturePropertyNames()) Save(material.GetTexture(property));
+                Save(material);
             }
         }
     }

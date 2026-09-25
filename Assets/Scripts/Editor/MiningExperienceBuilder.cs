@@ -5,6 +5,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using SafeMining;
 
 // The new experience is separate from the legacy demo, so authored work stays reviewable.
@@ -66,6 +68,9 @@ public static class MiningExperienceValidation
     static int randomRun, randomSuccess, randomBlocked;
     static string pairedSchedule;
     static int lastPhaseFrame;
+    static Keyboard testKeyboard;
+    static Vector3 fppPosition;
+    static float fppElapsed;
     static readonly List<string> results = new List<string>();
     public static void Run()
     {
@@ -75,7 +80,7 @@ public static class MiningExperienceValidation
             ValidateGraph(); ValidateRandomScenarios(); MiningExperienceBuilder.CreateScene();
             EditorSceneManager.OpenScene(MiningExperienceBuilder.ScenePath);
             EditorApplication.playModeStateChanged += OnPlay;
-            deadline = EditorApplication.timeSinceStartup + 240;
+            deadline = EditorApplication.timeSinceStartup + 360;
             EditorApplication.update += Tick;
             EditorApplication.isPlaying = true;
         }
@@ -195,15 +200,73 @@ public static class MiningExperienceValidation
                 Capture("01-menu");
                 CaptureDetector();
                 ValidateGeometry(simulation);
-                simulation.scenarioMode = HazardScenarioMode.Scripted;
-                simulation.Begin(MiningMode.FirstPerson, true);
-                Assert(simulation.Mode == MiningMode.Story, "Legacy call opened FPP");
-                Assert(simulation.GetComponentsInChildren<UnityEngine.UI.Button>(true).Length > 0, "Menu buttons missing");
+                simulation.scenarioMode = HazardScenarioMode.NoHazards;
+                // A batch editor has no focused Game view; route virtual test input to the player loop.
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+                bool fppButton = false;
                 foreach (var button in simulation.GetComponentsInChildren<UnityEngine.UI.Button>(true))
-                    Assert(!button.name.Contains("FPP"), "Menu still offers FPP");
-                results.Add("PASS story-only mode: legacy FPP request coerced to Story; no FPP menu button.");
-                simulation.Begin(MiningMode.Story, true); Time.timeScale = 12;
-                phase = 1;
+                    if (button.name == "Mulai Mode FPP  >") { button.onClick.Invoke(); fppButton = true; }
+                Assert(fppButton && simulation.Mode == MiningMode.FirstPerson, "FPP menu button did not start manual mode");
+                Assert(!simulation.Actor.Find("PPE worker model").gameObject.activeSelf, "Worker head obscures FPP camera");
+                Assert(Mathf.Abs(simulation.ViewCamera.transform.position.y - simulation.Actor.position.y - 1.65f) < .05f, "FPP eye height incorrect");
+                Assert(simulation.ViewCamera.fieldOfView == simulation.firstPersonFieldOfView, "FPP field of view not applied");
+                testKeyboard = InputSystem.AddDevice<Keyboard>(); testKeyboard.MakeCurrent();
+                fppPosition = simulation.Actor.position; lastPhaseFrame = frames; phase = 8;
+            }
+            else if (phase == 8 && simulation.Elapsed > .6f)
+            {
+                Assert(Vector2.Distance(new Vector2(fppPosition.x, fppPosition.z), new Vector2(simulation.Actor.position.x, simulation.Actor.position.z)) < .02f, "FPP moved automatically");
+                Capture("05-fpp");
+                InputSystem.QueueStateEvent(testKeyboard, new KeyboardState(Key.W, Key.F, Key.G));
+                lastPhaseFrame = frames; phase = 9;
+            }
+            else if (phase == 9 && simulation.Elapsed > 1.4f)
+            {
+                Assert(simulation.Actor.position.z > fppPosition.z + .1f, "W input did not move FPP forward: " + simulation.Actor.position + ", state=" + simulation.State + ", key=" + testKeyboard.wKey.isPressed);
+                Assert(!simulation.HeadlampEnabled && !simulation.GlassesEnabled, "F / G controls did not toggle equipment");
+                Assert(simulation.Travelled > .1f, "Manual travel was not recorded");
+                InputSystem.QueueStateEvent(testKeyboard, new KeyboardState(Key.W, Key.Escape));
+                lastPhaseFrame = frames; phase = 10;
+            }
+            else if (phase == 10 && simulation.State == SafeMining.SessionState.Paused)
+            {
+                Assert(simulation.State == SafeMining.SessionState.Paused, "Escape did not pause FPP");
+                Assert(Cursor.lockState == CursorLockMode.None && Cursor.visible, "Pause did not release mouse");
+                fppPosition = simulation.Actor.position; fppElapsed = simulation.Elapsed;
+                Capture("06-fpp-paused"); lastPhaseFrame = frames; phase = 11;
+            }
+            else if (phase == 11 && frames > lastPhaseFrame + 15)
+            {
+                Assert(simulation.Actor.position == fppPosition && simulation.Elapsed == fppElapsed, "Paused FPP moved or advanced the scenario");
+                InputSystem.QueueStateEvent(testKeyboard, new KeyboardState());
+                simulation.TogglePause();
+                Assert(simulation.State == SafeMining.SessionState.Running, "FPP resume failed");
+                simulation.Begin(MiningMode.FirstPerson, true);
+                Assert(simulation.Elapsed == 0 && simulation.Travelled == 0 && simulation.GlassesEnabled && simulation.HeadlampEnabled, "FPP restart leaked state");
+                var body = simulation.Actor.GetComponent<CharacterController>();
+                for (int i = 0; i < 100; i++) body.Move(Vector3.right * .1f);
+                Assert(simulation.Actor.position.x < 3, "FPP crossed exterior wall");
+                body.enabled = false; simulation.Actor.position = MineLayout.World(new Vector2Int(4, 6)) + Vector3.up * .05f; body.enabled = true;
+                simulation.SetHazard(0, 2); simulation.SetHazard(1, 2);
+                foreach (var cell in simulation.Route) Assert(!simulation.Blocked.Contains(cell), "FPP route crosses landslide");
+                Assert(simulation.Route.Count > 0 && simulation.Route[0].x == 4, "FPP did not replan from manual position");
+                body.enabled = false; simulation.Actor.position = MineLayout.World(MineLayout.Exits[2]) + Vector3.up * .05f; body.enabled = true;
+                phase = 12;
+            }
+            else if (phase == 12 && simulation.State == SafeMining.SessionState.Success)
+            {
+                Assert(Cursor.lockState == CursorLockMode.None, "FPP result kept mouse captured");
+                simulation.Export(); Assert(simulation.ExportStatus.StartsWith("CSV tersimpan"), "FPP export failed");
+                simulation.Menu(); Assert(simulation.Actor.Find("PPE worker model").gameObject.activeSelf, "Menu worker remained hidden after FPP");
+                simulation.Begin(MiningMode.FirstPerson, false);
+                var original = new List<Vector2Int>(simulation.Route);
+                simulation.SetHazard(0, 2);
+                Assert(simulation.Reroutes == 0 && original.Count == simulation.Route.Count, "Static FPP changed route");
+                results.Add("PASS FPP: menu launch, eye camera, idle/manual movement, F/G equipment, Escape/pause freeze, resume/reset, collision, adaptive replan, refuge success, CSV and static baseline.");
+                InputSystem.RemoveDevice(testKeyboard); testKeyboard = null;
+                simulation.scenarioMode = HazardScenarioMode.Scripted;
+                simulation.Begin(MiningMode.Story, true); Time.timeScale = 12; phase = 1;
             }
             else if (phase == 1 && !storyCaptured && simulation.Elapsed > 11)
             {
@@ -349,6 +412,7 @@ public static class MiningExperienceValidation
     }
     static void Finish(bool success, string message)
     {
+        if (testKeyboard != null) { InputSystem.RemoveDevice(testKeyboard); testKeyboard = null; }
         UnityEditor.SessionState.SetBool("MiningValidation", false); EditorApplication.update -= Tick;
         Directory.CreateDirectory("Validation"); File.WriteAllText("Validation/results.txt", string.Join("\n", results) + "\n" + message);
         Debug.Log("[MiningValidation] " + message);

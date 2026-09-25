@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Debug = UnityEngine.Debug;
 
 namespace SafeMining
@@ -16,6 +18,12 @@ namespace SafeMining
     {
         [Header("Denah prosedural (ubah sebelum Play; X/Y = grid X/Z)")]
         public List<MineCorridor> corridors = MineLayout.DefaultCorridors();
+        [Header("Kamera FPP (dapat disesuaikan saat Play)")]
+        [Range(.02f, .3f)] public float mouseSensitivity = .09f;
+        [Range(60, 95)] public float firstPersonFieldOfView = 74;
+        [Range(0, .035f)] public float headBobAmount = .012f;
+        [Range(1, 5)] public float walkSpeed = 3.1f;
+        [Range(3, 7)] public float sprintSpeed = 4.8f;
         [Header("Longsor dinamis")]
         public HazardScenarioMode scenarioMode = HazardScenarioMode.Random;
         public bool randomSeedOnLaunch = true;
@@ -52,6 +60,7 @@ namespace SafeMining
         public Camera ViewCamera { get; private set; }
         public string Phase { get; private set; } = "Persiapan";
         public bool GlassesEnabled { get; private set; } = true;
+        public bool HeadlampEnabled => headlamp != null && headlamp.enabled;
         public float RouteDistance
         {
             get
@@ -71,6 +80,9 @@ namespace SafeMining
         readonly List<GameObject> arrows = new List<GameObject>();
         Material arrowMaterial;
         AudioSource radioAlarm;
+        Light headlamp;
+        VolumeProfile visualProfile;
+        float stride, bobOffset;
         MiningHUD hud;
         MiningTelemetry telemetry;
         float pitch, gravityVelocity, nextPlan;
@@ -89,12 +101,14 @@ namespace SafeMining
             }
             var environment = new GameObject("Environment Layer | Mine").transform; environment.SetParent(transform, false);
             MineLayout.Build(environment, Cells);
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(.22f, .24f, .27f);
-            RenderSettings.fog = true; RenderSettings.fogColor = new Color(.045f, .055f, .06f);
-            RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = .017f;
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(.19f, .21f, .23f);
+            RenderSettings.ambientEquatorColor = new Color(.14f, .15f, .16f);
+            RenderSettings.ambientGroundColor = new Color(.075f, .068f, .055f);
+            RenderSettings.fog = true; RenderSettings.fogColor = new Color(.035f, .041f, .046f);
+            RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = .012f;
             HazardSites = MiningHazardScenario.DetectorSites(Cells);
-            BuildActor(); BuildHazards();
+            BuildActor(); BuildHazards(); BuildAtmosphere();
             if (randomSeedOnLaunch) scenarioSeed = Guid.NewGuid().GetHashCode();
             hud = gameObject.AddComponent<MiningHUD>(); hud.Simulation = this;
             telemetry = GetComponent<MiningTelemetry>() ?? gameObject.AddComponent<MiningTelemetry>(); telemetry.Simulation = this;
@@ -109,7 +123,7 @@ namespace SafeMining
                 }
                 arrow.SetActive(false); arrows.Add(arrow);
             }
-            Dialogue = "Pilih navigasi adaptif atau statis, lalu mulai Mode Cerita.";
+            Dialogue = "Pilih Mode Cerita atau FPP untuk memulai evakuasi.";
             UpdateCamera(true);
         }
 
@@ -121,9 +135,9 @@ namespace SafeMining
             body = Actor.gameObject.AddComponent<CharacterController>(); body.height = 1.8f; body.center = Vector3.up * .9f;
             body.radius = .3f; body.stepOffset = .25f; body.skinWidth = .035f;
             workerVisual = new GameObject("PPE worker model").transform; workerVisual.SetParent(Actor, false);
-            var orange = MineLayout.Material("Safety orange", new Color(.95f, .32f, .045f));
+            var orange = MineLayout.Material("Safety orange", new Color(.64f, .25f, .075f));
             var dark = MineLayout.Material("Boots and gloves", new Color(.06f, .07f, .075f));
-            var yellow = MineLayout.Material("Helmet", new Color(1f, .72f, .06f));
+            var yellow = MineLayout.Material("Helmet", new Color(.78f, .58f, .12f));
             var skin = MineLayout.Material("Skin", new Color(.57f, .34f, .21f));
             var silver = MineLayout.Material("Reflective stripes", new Color(.75f, .84f, .8f));
             var glass = MineLayout.Material("Safety glasses", new Color(.015f, .38f, .48f));
@@ -153,8 +167,10 @@ namespace SafeMining
             var cameraGO = new GameObject("Simulation camera", typeof(Camera), typeof(AudioListener)); cameraGO.transform.SetParent(transform, false);
             ViewCamera = cameraGO.GetComponent<Camera>(); ViewCamera.nearClipPlane = .06f; ViewCamera.farClipPlane = 180; ViewCamera.fieldOfView = 72;
             ViewCamera.clearFlags = CameraClearFlags.SolidColor; ViewCamera.backgroundColor = RenderSettings.fogColor;
-            var light = cameraGO.AddComponent<Light>(); light.type = LightType.Spot; light.range = 24; light.spotAngle = 88;
-            light.intensity = 5; light.color = new Color(1f, .91f, .72f); light.shadows = LightShadows.Soft;
+            headlamp = cameraGO.AddComponent<Light>(); headlamp.type = LightType.Spot;
+            headlamp.range = 26; headlamp.spotAngle = 72; headlamp.innerSpotAngle = 32;
+            headlamp.intensity = 24; headlamp.color = new Color(1f, .94f, .83f); headlamp.shadows = LightShadows.Soft;
+            headlamp.shadowBias = .025f; headlamp.shadowNormalBias = .15f;
             if (documentation) return;
             radioAlarm = cameraGO.AddComponent<AudioSource>(); radioAlarm.playOnAwake = false; radioAlarm.volume = .15f;
             const int sampleRate = 22050;
@@ -165,6 +181,22 @@ namespace SafeMining
                 samples[i] = Mathf.Sin(t * Mathf.PI * 2 * (t < .25f ? 660 : 880)) * Mathf.Sin(t * Mathf.PI * 2);
             }
             radioAlarm.clip = AudioClip.Create("Local evacuation alert", samples.Length, 1, sampleRate, false); radioAlarm.clip.SetData(samples, 0);
+        }
+
+        void BuildAtmosphere()
+        {
+            var cameraData = ViewCamera.GetUniversalAdditionalCameraData();
+            cameraData.renderPostProcessing = true;
+            cameraData.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
+            ViewCamera.allowHDR = true;
+            var go = new GameObject("Mine atmosphere | natural contrast"); go.transform.SetParent(transform, false);
+            var volume = go.AddComponent<Volume>(); volume.isGlobal = true; volume.priority = 10;
+            visualProfile = ScriptableObject.CreateInstance<VolumeProfile>(); volume.sharedProfile = visualProfile;
+            visualProfile.Add<Tonemapping>().mode.Override(TonemappingMode.ACES);
+            var color = visualProfile.Add<ColorAdjustments>(); color.postExposure.Override(.7f);
+            color.contrast.Override(8); color.saturation.Override(-12);
+            var bloom = visualProfile.Add<Bloom>(); bloom.threshold.Override(1.2f); bloom.intensity.Override(.12f);
+            var vignette = visualProfile.Add<Vignette>(); vignette.intensity.Override(.16f); vignette.smoothness.Override(.4f);
         }
 
         static void RoundedPart(Transform parent, string name, PrimitiveType type, Vector3 position, Vector3 scale, Material material)
@@ -228,11 +260,10 @@ namespace SafeMining
         public void Begin(MiningMode mode, bool adaptive)
         {
             if (Actor == null) return;
-            // Keep the legacy signature for scene/tool compatibility; research sessions use Story only.
-            mode = MiningMode.Story;
             Mode = mode; Adaptive = adaptive; State = SessionState.Running;
             Elapsed = Travelled = Exposure = ResponseMs = MaxResponseMs = 0; Reroutes = HazardContacts = 0;
             pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
+            stride = bobOffset = 0; headlamp.enabled = true;
             Blocked.Clear(); eventRows.Clear(); ExportStatus = "";
             ActiveSeed = scenarioSeed; ActiveScenario = scenarioMode; activeWarningPenalty = Mathf.Max(0, warningRiskPenalty);
             Schedule = MiningHazardScenario.Create(Cells, HazardSites, ActiveScenario, ActiveSeed,
@@ -244,7 +275,9 @@ namespace SafeMining
             previousPosition = Actor.position; lastCell = MineLayout.Cell(Actor.position);
             workerVisual.gameObject.SetActive(mode == MiningMode.Story);
             Phase = "01 / Briefing";
-            Dialogue = "Tim: Kita berada di galeri produksi. Amati detektor kuning di dinding. Lampu kuning berarti waspada; merah berarti jalur tertutup.";
+            Dialogue = mode == MiningMode.Story
+                ? "Tim: Kita berada di galeri produksi. Amati detektor kuning di dinding. Lampu kuning berarti waspada; merah berarti jalur tertutup."
+                : "Tim: Ikuti penunjuk ke zona aman. WASD untuk bergerak, mouse untuk melihat. Hindari detektor kuning dan lorong merah.";
             Plan(false); LogEvent("start", mode + "/" + (adaptive ? "adaptive" : "static")); SetCursor(); UpdateCamera(true);
         }
 
@@ -254,7 +287,15 @@ namespace SafeMining
             else if (State == SessionState.Paused) State = SessionState.Running;
             SetCursor();
         }
-        public void Menu() { State = SessionState.Menu; SetCursor(); }
+        public void Menu() { State = SessionState.Menu; workerVisual.gameObject.SetActive(true); headlamp.enabled = true; SetCursor(); }
+        public void ToggleGlasses()
+        {
+            if (Mode == MiningMode.FirstPerson && State == SessionState.Running) GlassesEnabled = !GlassesEnabled;
+        }
+        public void ToggleHeadlamp()
+        {
+            if (Mode == MiningMode.FirstPerson && State == SessionState.Running) headlamp.enabled = !headlamp.enabled;
+        }
         void SetCursor() { bool capture = State == SessionState.Running && Mode == MiningMode.FirstPerson; Cursor.lockState = capture ? CursorLockMode.Locked : CursorLockMode.None; Cursor.visible = !capture; }
 
         void Update()
@@ -264,6 +305,8 @@ namespace SafeMining
             {
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
                 if (keyboard.rKey.wasPressedThisFrame && State != SessionState.Menu) Begin(Mode, Adaptive);
+                if (keyboard.gKey.wasPressedThisFrame) ToggleGlasses();
+                if (keyboard.fKey.wasPressedThisFrame) ToggleHeadlamp();
             }
             if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
             float dt = Mathf.Min(Time.deltaTime, .05f);
@@ -391,15 +434,22 @@ namespace SafeMining
 
         void MovePlayer(float dt)
         {
-            Vector2 look = Mouse.current != null && Cursor.lockState == CursorLockMode.Locked ? Mouse.current.delta.ReadValue() * .09f : Vector2.zero;
+            // Escape in the editor can release the pointer before focus changes; never move behind an unlocked cursor.
+            if (Cursor.lockState != CursorLockMode.Locked && !Application.isBatchMode) return;
+            Vector2 look = Mouse.current != null ? Mouse.current.delta.ReadValue() * mouseSensitivity : Vector2.zero;
             if (Gamepad.current != null) look += Gamepad.current.rightStick.ReadValue() * (110 * dt);
             Actor.Rotate(0, look.x, 0); pitch = Mathf.Clamp(pitch - look.y, -70, 70);
             Vector2 input = Gamepad.current != null ? Gamepad.current.leftStick.ReadValue() : Vector2.zero;
             var k = Keyboard.current;
             if (k != null) { input.x += (k.dKey.isPressed ? 1 : 0) - (k.aKey.isPressed ? 1 : 0); input.y += (k.wKey.isPressed ? 1 : 0) - (k.sKey.isPressed ? 1 : 0); }
             input = Vector2.ClampMagnitude(input, 1);
-            float speed = k != null && k.leftShiftKey.isPressed ? 4.8f : 3.1f;
+            bool sprinting = (k != null && k.leftShiftKey.isPressed) || (Gamepad.current != null && Gamepad.current.leftStickButton.isPressed);
+            float speed = sprinting ? sprintSpeed : walkSpeed;
+            Vector3 before = Actor.position;
             body.Move((Actor.right * input.x + Actor.forward * input.y) * (speed * dt));
+            float moved = Vector3.Distance(Flat(before), Flat(Actor.position));
+            stride += moved * 9;
+            bobOffset = Mathf.Lerp(bobOffset, moved > .001f ? Mathf.Sin(stride) * headBobAmount : 0, dt * 12);
         }
 
         void CheckExposure(float dt)
@@ -420,9 +470,10 @@ namespace SafeMining
         void UpdateCamera(bool snap)
         {
             if (ViewCamera == null) return;
+            ViewCamera.fieldOfView = Mode == MiningMode.FirstPerson && State != SessionState.Menu ? firstPersonFieldOfView : 68;
             Vector3 eye = Actor.position + Vector3.up * 1.65f;
             if (Mode == MiningMode.FirstPerson && State != SessionState.Menu)
-            { ViewCamera.transform.SetPositionAndRotation(eye, Actor.rotation * Quaternion.Euler(pitch, 0, 0)); return; }
+            { ViewCamera.transform.SetPositionAndRotation(eye + Vector3.up * bobOffset, Actor.rotation * Quaternion.Euler(pitch, 0, 0)); return; }
             Vector3 desired = Actor.position - Actor.forward * 3.1f + Vector3.up * 2.65f;
             Vector3 direction = desired - eye;
             if (Physics.SphereCast(eye, .16f, direction.normalized, out RaycastHit hit, direction.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
@@ -468,7 +519,8 @@ namespace SafeMining
         [Serializable] class ExperimentConfig
         {
             public int seed;
-            public string scenario, planner, unityVersion;
+            public string scenario, planner, unityVersion, mode;
+            public float fppWalkSpeed, fppSprintSpeed;
             public float warningRiskPenalty;
             public float cellSize = MineLayout.CellSize, workerSpeed = 2.8f, exposureRadius = 4.5f;
             public Vector2Int spawn = MineLayout.Spawn;
@@ -497,6 +549,7 @@ namespace SafeMining
                 File.WriteAllText(prefix + "_scenario.csv", string.Join("\n", scheduleRows));
                 File.WriteAllText(prefix + "_config.json", JsonUtility.ToJson(new ExperimentConfig {
                     seed = ActiveSeed, scenario = ActiveScenario.ToString(), warningRiskPenalty = activeWarningPenalty,
+                    mode = Mode.ToString(), fppWalkSpeed = walkSpeed, fppSprintSpeed = sprintSpeed,
                     detectorSites = HazardSites.ToArray(), schedule = Schedule.ToArray(),
                     unityVersion = Application.unityVersion, planner = "Dijkstra_distance_plus_warning_penalty_v1"
                 }, true));
@@ -504,6 +557,18 @@ namespace SafeMining
             }
             catch (Exception e) { ExportStatus = "Ekspor gagal: " + e.Message; Debug.LogWarning(ExportStatus); }
         }
-        void OnDestroy() { if (Application.isPlaying) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; } }
+        void OnApplicationFocus(bool focused)
+        {
+            if (!focused && Mode == MiningMode.FirstPerson && State == SessionState.Running) TogglePause();
+        }
+        void OnDestroy()
+        {
+            if (visualProfile != null)
+            {
+                foreach (var component in visualProfile.components) Destroy(component);
+                Destroy(visualProfile);
+            }
+            if (Application.isPlaying) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+        }
     }
 }

@@ -163,20 +163,13 @@ namespace SafeMining
         {
             var shell = new GameObject("Terrain + Collision | sealed tunnel shell").transform; shell.SetParent(root, false);
             var props = new GameObject("Environment | supports, rails, pipes, lamps").transform; props.SetParent(root, false);
-            var rock = Material("Stratified sandstone", new Color(.29f, .255f, .21f));
-            var ground = Material("Compacted gravel", new Color(.20f, .18f, .15f));
-            var timber = Material("Aged timber", new Color(.21f, .12f, .065f));
-            var steel = Material("Galvanized steel", new Color(.19f, .23f, .25f));
-            var lamp = Material("Amber safety lamp", new Color(1f, .65f, .23f), true);
+            var rock = MineSurface.Create("Stratified sandstone", MineSurface.Kind.Rock);
+            var ground = MineSurface.Create("Compacted gravel", MineSurface.Kind.Gravel);
+            ground.mainTextureScale = Vector2.one * 3;
+            var timber = MineSurface.Create("Aged timber", MineSurface.Kind.Timber);
+            var steel = MineSurface.Create("Weathered steel", MineSurface.Kind.Steel);
+            var lamp = Material("Warm safety lamp", new Color(1f, .83f, .60f), true);
             var green = Material("Refuge lighting", new Color(.08f, .8f, .44f), true);
-            var texture = new Texture2D(128, 128, TextureFormat.RGB24, true);
-            texture.name = "Procedural mineral grain";
-            for (int y = 0; y < 128; y++) for (int x = 0; x < 128; x++)
-            {
-                float grain = Mathf.PerlinNoise(x * .22f, y * .22f) * .3f + Mathf.PerlinNoise(x * .065f, y * .31f) * .5f;
-                texture.SetPixel(x, y, Color.Lerp(new Color(.3f, .28f, .24f), new Color(.85f, .8f, .7f), grain));
-            }
-            texture.Apply(); rock.mainTexture = texture; ground.mainTexture = texture;
             var verts = new List<Vector3>(); var triangles = new List<int>(); var uv = new List<Vector2>();
             foreach (var cell in cells)
             {
@@ -212,7 +205,16 @@ namespace SafeMining
                     Box(support, "Left post", new Vector3(-2.65f, 2, 0), new Vector3(.25f, 4, .3f), timber);
                     Box(support, "Right post", new Vector3(2.65f, 2, 0), new Vector3(.25f, 4, .3f), timber);
                     Box(support, "Crossbeam", new Vector3(0, 4, 0), new Vector3(5.65f, .3f, .32f), timber);
-                    Box(support, "Ventilation pipe", new Vector3(2.3f, 3.6f, 0), new Vector3(.25f, .25f, 6.01f), steel, false);
+                    Cylinder(support, "Ventilation pipe", new Vector3(2.3f, 3.55f, 0), .14f, 6.01f, steel, Quaternion.Euler(90, 0, 0));
+                    Cylinder(support, "Pipe flange", new Vector3(2.3f, 3.55f, 2.7f), .19f, .09f, steel, Quaternion.Euler(90, 0, 0));
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        Box(support, "Steel post shoe", new Vector3(side * 2.65f, .22f, 0), new Vector3(.29f, .44f, .34f), steel, false);
+                        Box(support, "Beam connector plate", new Vector3(side * 2.65f, 3.84f, -.17f), new Vector3(.31f, .42f, .035f), steel, false);
+                        Cylinder(support, "Support bolt", new Vector3(side * 2.65f, 3.77f, -.20f), .035f, .055f, steel, Quaternion.Euler(90, 0, 0));
+                    }
+                    for (int cable = 0; cable < 2; cable++)
+                        Cylinder(support, "Wall service cable", new Vector3(-2.48f, 3.2f + cable * .12f, 0), .025f, 6.01f, steel, Quaternion.Euler(90, 0, 0));
                     for (int side = -1; side <= 1; side += 2)
                         Box(support, "Mine rail", new Vector3(side * .72f, .045f, 0), new Vector3(.065f, .09f, 6.01f), steel, false);
                     for (int z = -2; z <= 2; z += 2)
@@ -220,24 +222,45 @@ namespace SafeMining
                 }
                 if ((cell.x + cell.y) % 2 == 0)
                 {
-                    var bulb = Box(props, "Caged mine light", p + new Vector3(0, 3.8f, 0), new Vector3(.32f, .18f, .32f), lamp, false);
-                    var light = bulb.AddComponent<Light>(); light.color = new Color(1f, .72f, .42f); light.range = 11; light.intensity = 2.4f;
+                    Box(props, "Lamp ceiling mount", p + new Vector3(0, 4.2f, 0), new Vector3(.34f, .12f, .30f), steel, false);
+                    Cylinder(props, "Lamp stem", p + new Vector3(0, 4.02f, 0), .035f, .35f, steel, Quaternion.identity);
+                    var bulb = Cylinder(props, "Caged mine light", p + new Vector3(0, 3.78f, 0), .10f, .24f, lamp, Quaternion.identity);
+                    for (int cage = 0; cage < 4; cage++)
+                    {
+                        float angle = cage * Mathf.PI * .5f;
+                        Cylinder(props, "Lamp guard", p + new Vector3(Mathf.Cos(angle) * .13f, 3.78f, Mathf.Sin(angle) * .13f), .014f, .30f, steel, Quaternion.identity);
+                    }
+                    Cylinder(props, "Lamp end cap", p + new Vector3(0, 3.62f, 0), .15f, .04f, steel, Quaternion.identity);
+                    var light = bulb.AddComponent<Light>(); light.color = new Color(1f, .84f, .65f); light.range = 12; light.intensity = 7;
                 }
             }
             var mesh = new Mesh { name = "Continuous rock shell", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-            mesh.SetVertices(verts); mesh.SetTriangles(triangles, 0); mesh.SetUVs(0, uv); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            mesh.SetVertices(verts); mesh.SetTriangles(triangles, 0); mesh.SetUVs(0, uv); mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
             var rockShell = new GameObject("Rock walls and ceiling", typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
             rockShell.transform.SetParent(shell, false); rockShell.GetComponent<MeshFilter>().sharedMesh = mesh;
             rockShell.GetComponent<MeshRenderer>().sharedMaterial = rock; rockShell.GetComponent<MeshCollider>().sharedMesh = mesh;
             for (int i = 0; i < Exits.Length; i++)
             {
                 Vector3 p = World(Exits[i]);
-                Box(props, "Refuge pad", p + Vector3.up * .018f, new Vector3(4, .035f, 4), green, false);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Box(props, "Refuge boundary light", p + new Vector3(side * 2, .028f, 0), new Vector3(.07f, .035f, 4), green, false);
+                    Box(props, "Refuge boundary light", p + new Vector3(0, .028f, side * 2), new Vector3(4, .035f, .07f), green, false);
+                }
                 Sign(props, p + new Vector3(0, 3.1f, 2), "ZONA AMAN " + (i + 1) + "\nREFUGE / EVAKUASI", new Color(.3f, 1, .65f));
                 Box(props, "Emergency cabinet", p + new Vector3(2.1f, .8f, 1.8f), new Vector3(.7f, 1.6f, .5f), steel);
             }
             Sign(props, new Vector3(0, 3.1f, -17), "SAFE-MINING EVAC\nGALERI UTAMA  /  -120 m", Color.white);
             Sign(props, new Vector3(0, 3.2f, 1.8f), "BARAT  <     PUSAT     >  TIMUR\nJALUR EVAKUASI", new Color(1, .8f, .35f));
+        }
+
+        static GameObject Cylinder(Transform parent, string name, Vector3 position, float radius, float length, Material material, Quaternion rotation)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder); go.name = name; go.transform.SetParent(parent, false);
+            go.transform.localPosition = position; go.transform.localRotation = rotation;
+            go.transform.localScale = new Vector3(radius * 2, length * .5f, radius * 2);
+            go.GetComponent<Renderer>().sharedMaterial = material; go.GetComponent<Collider>().enabled = false;
+            return go;
         }
 
         static float Roof(Vector3 p) => Ceiling + Mathf.PerlinNoise(p.x * .19f + 50, p.z * .19f + 50) * .45f;
@@ -254,7 +277,10 @@ namespace SafeMining
         {
             int i = v.Count; v.AddRange(new[] { a, b, c, d });
             t.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
-            uv.AddRange(new[] { new Vector2(a.x + a.z, a.y + a.z), new Vector2(b.x + b.z, b.y + b.z), new Vector2(c.x + c.z, c.y + c.z), new Vector2(d.x + d.z, d.y + d.z) });
+            Vector3 normal = Vector3.Cross(b - a, c - a).normalized;
+            bool roof = Mathf.Abs(normal.y) > .7f;
+            Vector2 UV(Vector3 p) => (roof ? new Vector2(p.x, p.z) : new Vector2(p.x + p.z, p.y)) * .5f;
+            uv.AddRange(new[] { UV(a), UV(b), UV(c), UV(d) });
         }
         public static void Sign(Transform parent, Vector3 p, string text, Color color)
         {

@@ -8,13 +8,14 @@ namespace SafeMining
     public class MiningHUD : MonoBehaviour
     {
         public MiningSimulation Simulation;
-        readonly Color cyan = new Color(.16f, .85f, .91f);
-        readonly Color green = new Color(.22f, 1, .66f);
-        readonly Color muted = new Color(.58f, .69f, .74f);
-        readonly Color panel = new Color(.025f, .062f, .086f, .94f);
+        readonly Color cyan = new Color(.80f, .72f, .51f);
+        readonly Color green = new Color(.49f, .79f, .63f);
+        readonly Color muted = new Color(.68f, .71f, .70f);
+        readonly Color panel = new Color(.045f, .052f, .055f, .89f);
         Font font;
         Transform canvas, menu, hud, modal, glasses;
         Text phase, mode, dialogue, direction, distance, metrics, hazard, timer, modalTitle, modalBody, exportStatus, navButtonLabel, scenarioLabel, detectorStatus;
+        Text controlHints, equipmentStatus;
         bool adaptive = true;
         Image dangerWash;
         MineMapGraphic map;
@@ -40,7 +41,7 @@ namespace SafeMining
         RectTransform Card(Transform parent, string name, Vector2 anchor, Vector2 pos, Vector2 size)
         {
             var card = Panel(parent, name, anchor, anchor, pos, size, panel);
-            var outline = card.gameObject.AddComponent<Outline>(); outline.effectColor = new Color(.18f, .38f, .46f, .7f); outline.effectDistance = new Vector2(1, -1); return card;
+            var outline = card.gameObject.AddComponent<Outline>(); outline.effectColor = new Color(.38f, .40f, .38f, .5f); outline.effectDistance = new Vector2(1, -1); return card;
         }
         Text Label(Transform parent, string name, string value, Vector2 pos, Vector2 size, int fontSize, Color color, TextAnchor alignment = TextAnchor.UpperLeft)
         {
@@ -51,22 +52,27 @@ namespace SafeMining
         }
         Button Button(Transform parent, string value, Vector2 pos, Vector2 size, UnityEngine.Events.UnityAction action, bool primary = false)
         {
-            var r = Panel(parent, value, new Vector2(.5f, .5f), new Vector2(.5f, .5f), pos, size, primary ? new Color(.08f, .62f, .56f) : new Color(.09f, .18f, .23f));
+            var r = Panel(parent, value, new Vector2(.5f, .5f), new Vector2(.5f, .5f), pos, size, primary ? new Color(.24f, .40f, .32f) : new Color(.14f, .17f, .18f));
             r.GetComponent<Image>().raycastTarget = true; var button = r.gameObject.AddComponent<Button>(); button.targetGraphic = r.GetComponent<Image>(); button.onClick.AddListener(action);
             Label(r, "Label", value, Vector2.zero, size - new Vector2(14, 8), 19, Color.white, TextAnchor.MiddleCenter);
             return button;
         }
         void BuildMenu()
         {
-            menu = Panel(canvas, "Story simulation", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(.015f, .035f, .055f, .92f));
+            menu = Panel(canvas, "Simulation modes", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(.02f, .025f, .028f, .86f));
             Label(menu, "Eyebrow", "PENS   /   VIRTUAL UNDERGROUND MINE", new Vector2(0, 330), new Vector2(1100, 35), 19, cyan);
-            Label(menu, "Title", "SAFE-MINING <color=#43F0B4>EVAC</color>", new Vector2(0, 267), new Vector2(1100, 80), 57, Color.white);
+            Label(menu, "Title", "SAFE-MINING <color=#BDCAA9>EVAC</color>", new Vector2(0, 267), new Vector2(1100, 80), 57, Color.white);
             Label(menu, "Subtitle", "Kenali bahaya. Temukan jalan pulang.", new Vector2(0, 198), new Vector2(1100, 45), 27, muted);
-            var story = Card(menu, "Story card", new Vector2(.5f, .5f), new Vector2(0, -18), new Vector2(700, 325));
+            var story = Card(menu, "Story card", new Vector2(.5f, .5f), new Vector2(-282, -18), new Vector2(536, 325));
             Label(story, "Number", "01  /  PELAJARI SKENARIO", new Vector2(0, 119), new Vector2(466, 30), 17, cyan);
             Label(story, "Heading", "Mode Cerita", new Vector2(0, 63), new Vector2(466, 60), 37, Color.white);
             Label(story, "Body", "Ikuti pekerja tambang menjalani evakuasi otomatis. Amati detektor di dinding, lampu peringatan, longsor acak, dan perubahan rute menuju zona aman.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
             Button(story, "Mulai Mode Cerita  >", new Vector2(0, -112), new Vector2(466, 56), () => Simulation.Begin(MiningMode.Story, adaptive), true);
+            var fpp = Card(menu, "FPP card", new Vector2(.5f, .5f), new Vector2(282, -18), new Vector2(536, 325));
+            Label(fpp, "Number", "02  /  JALANI EVAKUASI", new Vector2(0, 119), new Vector2(466, 30), 17, cyan);
+            Label(fpp, "Heading", "Mode FPP", new Vector2(0, 63), new Vector2(466, 60), 37, Color.white);
+            Label(fpp, "Body", "Masuki tambang dari sudut pandang pekerja. Kendalikan langkah, gunakan lampu helm, dan ikuti navigasi kacamata menuju zona aman.", new Vector2(0, -17), new Vector2(466, 96), 21, muted);
+            Button(fpp, "Mulai Mode FPP  >", new Vector2(0, -112), new Vector2(466, 56), () => Simulation.Begin(MiningMode.FirstPerson, adaptive), true);
             var navigation = Button(menu, "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS", new Vector2(0, -237), new Vector2(1100, 52), () =>
             { adaptive = !adaptive; navButtonLabel.text = adaptive ? "Navigasi: ADAPTIF  |  klik untuk pembanding STATIS" : "Navigasi: STATIS / BASELINE  |  jalur awal tetap"; });
             navButtonLabel = navigation.GetComponentInChildren<Text>();
@@ -74,7 +80,7 @@ namespace SafeMining
             Button(menu, "Jenis: Acak / Tetap / Tanpa bahaya", new Vector2(282, -302), new Vector2(536, 48), () =>
                 Simulation.scenarioMode = (HazardScenarioMode)(((int)Simulation.scenarioMode + 1) % 3));
             scenarioLabel = Label(menu, "Scenario seed", "", new Vector2(0, -352), new Vector2(1100, 30), 17, cyan, TextAnchor.MiddleCenter);
-            Label(menu, "Controls", "Pekerja bergerak otomatis     Esc: jeda / lanjut     R: ulangi sesi", new Vector2(0, -394), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
+            Label(menu, "Controls", "FPP: WASD + mouse   /   Shift: lari   /   F: lampu   /   G: kacamata   /   Esc: jeda   /   R: ulang", new Vector2(0, -394), new Vector2(1100, 36), 18, muted, TextAnchor.MiddleCenter);
             Label(menu, "Research", "Simulasi penelitian berdasarkan abstrak SAFE-MINING EVAC  |  kondisi dan sensor dimodelkan secara virtual", new Vector2(0, -429), new Vector2(1300, 30), 16, muted, TextAnchor.MiddleCenter);
         }
         void BuildHUD()
@@ -101,7 +107,8 @@ namespace SafeMining
             var sensors = Card(hud, "Detector network", new Vector2(0, 1), new Vector2(298, -191), new Vector2(540, 90));
             detectorStatus = Label(sensors, "Sensor status", "", Vector2.zero, new Vector2(500, 74), 18, cyan);
             hazard = Label(hud, "Hazard alert", "", new Vector2(0, 255), new Vector2(720, 55), 24, new Color(1, .45f, .3f), TextAnchor.MiddleCenter);
-            Label(hud, "Control hints", "ESC  Jeda / lanjut     R  Ulangi Mode Cerita", new Vector2(0, -426), new Vector2(1000, 26), 15, muted, TextAnchor.MiddleCenter);
+            controlHints = Label(hud, "Control hints", "", new Vector2(0, -426), new Vector2(1400, 26), 15, muted, TextAnchor.MiddleCenter);
+            equipmentStatus = Label(hud, "FPP equipment", "", new Vector2(0, 417), new Vector2(640, 26), 15, muted, TextAnchor.MiddleCenter);
             Button(banner, "II", new Vector2(237, 30), new Vector2(36, 34), () => Simulation.TogglePause());
             glasses = Panel(hud, "Safety glasses rim", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, Color.clear);
             foreach (int sx in new[] { -1, 1 }) foreach (int sy in new[] { -1, 1 })
@@ -110,21 +117,30 @@ namespace SafeMining
                 Panel(glasses, "Lens horizontal rim", anchor, anchor, new Vector2(-sx * 76, -sy * 20), new Vector2(116, 3), new Color(cyan.r, cyan.g, cyan.b, .65f));
                 Panel(glasses, "Lens vertical rim", anchor, anchor, new Vector2(-sx * 20, -sy * 72), new Vector2(3, 105), new Color(cyan.r, cyan.g, cyan.b, .65f));
             }
-            Label(glasses, "Reticle", "+", Vector2.zero, new Vector2(30, 30), 22, new Color(.5f, 1, 1, .65f), TextAnchor.MiddleCenter);
+            Label(glasses, "Reticle", "·", Vector2.zero, new Vector2(24, 24), 24, new Color(.85f, .9f, .85f, .55f), TextAnchor.MiddleCenter);
             dangerWash = Panel(hud, "Danger proximity", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, Color.clear).GetComponent<Image>();
             dangerWash.transform.SetAsFirstSibling();
         }
         void BuildModal()
         {
             modal = Panel(canvas, "Pause and result", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(.01f, .025f, .04f, .9f));
-            var card = Card(modal, "Result", new Vector2(.5f, .5f), Vector2.zero, new Vector2(790, 625));
+            var card = Card(modal, "Result", new Vector2(.5f, .5f), new Vector2(0, 50), new Vector2(790, 625));
             modalTitle = Label(card, "Title", "", new Vector2(0, 237), new Vector2(710, 64), 38, green, TextAnchor.MiddleCenter);
             modalBody = Label(card, "Summary", "", new Vector2(0, 78), new Vector2(682, 220), 23, Color.white);
             Button(card, "Lanjut / Ulang", new Vector2(-177, -86), new Vector2(326, 54), () => { if (Simulation.State == SessionState.Paused) Simulation.TogglePause(); else Simulation.Begin(Simulation.Mode, Simulation.Adaptive); }, true);
             Button(card, "Menu simulasi", new Vector2(177, -86), new Vector2(326, 54), () => Simulation.Menu());
             Button(card, "Ekspor hasil evaluasi (.csv)", new Vector2(0, -161), new Vector2(682, 52), () => Simulation.Export());
             exportStatus = Label(card, "Export location", "", new Vector2(0, -245), new Vector2(690, 91), 15, muted, TextAnchor.MiddleCenter);
+            var settings = Card(modal, "Camera settings", new Vector2(.5f, .5f), new Vector2(0, -338), new Vector2(790, 126));
+            Label(settings, "Settings label", "KENYAMANAN KAMERA FPP", new Vector2(0, 37), new Vector2(710, 26), 15, cyan);
+            Button(settings, "Mouse -", new Vector2(-292, -4), new Vector2(125, 38), () => Simulation.mouseSensitivity = Mathf.Max(.02f, Simulation.mouseSensitivity - .01f));
+            Button(settings, "Mouse +", new Vector2(-153, -4), new Vector2(125, 38), () => Simulation.mouseSensitivity = Mathf.Min(.3f, Simulation.mouseSensitivity + .01f));
+            Button(settings, "FOV -", new Vector2(18, -4), new Vector2(104, 38), () => Simulation.firstPersonFieldOfView = Mathf.Max(60, Simulation.firstPersonFieldOfView - 2));
+            Button(settings, "FOV +", new Vector2(135, -4), new Vector2(104, 38), () => Simulation.firstPersonFieldOfView = Mathf.Min(95, Simulation.firstPersonFieldOfView + 2));
+            Button(settings, "Ayunan", new Vector2(292, -4), new Vector2(125, 38), () => Simulation.headBobAmount = Simulation.headBobAmount > 0 ? 0 : .012f);
+            cameraSettingsLabel = Label(settings, "Current camera settings", "", new Vector2(0, -42), new Vector2(710, 24), 15, muted, TextAnchor.MiddleCenter);
         }
+        Text cameraSettingsLabel;
         void Update()
         {
             if (menu == null) return;
@@ -134,6 +150,8 @@ namespace SafeMining
             bool showResult = s.State == SessionState.Paused || s.State == SessionState.Success || s.State == SessionState.Blocked;
             modal.gameObject.SetActive(showResult);
             mode.text = "SAFE-MINING EVAC  /  " + (s.Mode == MiningMode.Story ? "MODE CERITA" : "MODE FPP");
+            controlHints.text = s.Mode == MiningMode.Story ? "ESC  Jeda / lanjut     R  Ulangi Mode Cerita" : "WASD  Bergerak     MOUSE  Lihat     SHIFT  Lari     F  Lampu     G  Kacamata     ESC  Jeda     R  Ulang";
+            equipmentStatus.text = s.Mode == MiningMode.FirstPerson ? "LAMPU HELM " + (s.HeadlampEnabled ? "ON" : "OFF") + "   /   NAVIGASI AR " + (s.GlassesEnabled ? "ON" : "OFF") : "";
             scenarioLabel.text = "Skenario: " + s.scenarioMode + "  |  Seed " + s.scenarioSeed + "  |  R dan ulang memakai seed yang sama";
             detectorStatus.text = "JARINGAN DETEKTOR  /  " + s.Detectors.Length + " titik\n" + s.LastDetectorAlert;
             phase.text = s.Phase;
@@ -150,6 +168,7 @@ namespace SafeMining
             map.SetVerticesDirty();
             if (showResult)
             {
+                cameraSettingsLabel.text = "Mouse " + s.mouseSensitivity.ToString("F2") + "   /   FOV " + s.firstPersonFieldOfView.ToString("F0") + "°   /   Ayunan " + (s.headBobAmount > 0 ? "ON" : "OFF");
                 modalTitle.text = s.State == SessionState.Success ? "EVAKUASI BERHASIL" : s.State == SessionState.Paused ? "SIMULASI DIJEDA" : "RUTE TERHALANG";
                 modalBody.text = (s.Mode == MiningMode.Story ? "Mode Cerita" : "Mode FPP") + "  /  " + (s.Adaptive ? "Navigasi adaptif" : "Baseline statis") +
                     "  |  Seed " + s.ActiveSeed + "\n\nWaktu simulasi       " + s.Elapsed.ToString("F1") + " detik" +
