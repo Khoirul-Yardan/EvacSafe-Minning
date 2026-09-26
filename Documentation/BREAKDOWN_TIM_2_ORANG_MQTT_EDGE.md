@@ -1,6 +1,6 @@
 ﻿# Implementasi Orang 1: getaran, edge, MQTT
 
-Pembaruan 25 September 2026. Lingkup aktif mengikuti permintaan pengguna: kerjakan Orang 1 saja. Rencana panel cutscene, kamera close-up, dan visual tambahan Orang 2 tidak menjadi persyaratan perubahan ini.
+Lingkup 25 September 2026 mengikuti permintaan saat itu: kerjakan Orang 1 saja. Pada 27 September, lingkup diperluas untuk menggabungkan HUD `feat/irawan` dan panel cutscene longsor pada Cerita/FPP. Lihat [catatan integrasi terbaru](UPDATE_IRAWAN_CUTSCENE_2026-09-27.md). Tabel berikut tetap mencatat pekerjaan inti Orang 1.
 
 Konsep: **getaran lingkungan virtual → sensor/edge → MQTT → penerapan bahaya → navigasi**. Aktivasi tidak menggunakan spawn point atau kedekatan pekerja. Lokasi awal pekerja dan titik pemasangan sensor hanya bagian denah.
 

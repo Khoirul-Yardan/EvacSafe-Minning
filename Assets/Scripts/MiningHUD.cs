@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+using System.Collections.Generic;
 
 namespace SafeMining
 {
@@ -23,6 +24,7 @@ namespace SafeMining
         EdgeStatusMessage latestVibration;
         EdgeStatusMessage latestAppliedHazard;
         float warningThreshold, dangerThreshold;
+        readonly Dictionary<string, EdgeStatusMessage> vibrationByDevice = new Dictionary<string, EdgeStatusMessage>();
 
         void Start()
         {
@@ -92,7 +94,7 @@ namespace SafeMining
             var banner = Card(hud, "Mission", new Vector2(0, 1), new Vector2(298, -79), new Vector2(540, 110));
             mode = Label(banner, "Mode", "", new Vector2(0, 28), new Vector2(496, 28), 16, cyan);
             phase = Label(banner, "Phase", "", new Vector2(0, -12), new Vector2(496, 48), 24, Color.white);
-            var flow = Card(hud, "Sensor edge broker route", new Vector2(.5f, 1), new Vector2(0, -79), new Vector2(620, 110));
+            var flow = Card(hud, "Sensor edge broker route", new Vector2(.5f, 1), new Vector2(96, -79), new Vector2(620, 110));
             Label(flow, "Pipeline heading", "ALUR DETEKSI  /  SENSOR  >  EDGE  >  MQTT  >  RUTE", new Vector2(0, 31), new Vector2(588, 25), 15, cyan);
             edgeFlow = Label(flow, "Pipeline status", "Menunggu sesi simulasi", new Vector2(0, -13), new Vector2(588, 60), 16, Color.white);
             var radar = Card(hud, "Map", new Vector2(1, 1), new Vector2(-151, -200), new Vector2(246, 352));
@@ -107,6 +109,15 @@ namespace SafeMining
             var bottom = Card(hud, "Team dialogue", new Vector2(0, 0), new Vector2(342, 94), new Vector2(628, 132));
             Label(bottom, "Speaker", "RADIO TIM  /  PUSAT KENDALI", new Vector2(0, 40), new Vector2(582, 25), 16, cyan);
             dialogue = Label(bottom, "Dialogue", "", new Vector2(0, -15), new Vector2(582, 82), 20, Color.white);
+            var cutscene = Card(hud, "Landslide cutscene", new Vector2(0, 0), new Vector2(218, 304), new Vector2(380, 264));
+            var cutsceneTitle = Label(cutscene, "Camera location", "", new Vector2(0, 111), new Vector2(352, 24), 16, new Color(1, .62f, .44f));
+            var cutsceneStatus = Label(cutscene, "Camera queue", "", new Vector2(0, -114), new Vector2(352, 22), 14, muted);
+            var feed = new GameObject("Live landslide view", typeof(RectTransform), typeof(RawImage));
+            feed.transform.SetParent(cutscene, false);
+            var feedRect = feed.GetComponent<RectTransform>(); feedRect.sizeDelta = new Vector2(352, 198);
+            feed.GetComponent<RawImage>().raycastTarget = false;
+            gameObject.AddComponent<MiningLandslideCutscene>().Initialize(Simulation, cutscene.gameObject,
+                feed.GetComponent<RawImage>(), cutsceneTitle, cutsceneStatus);
             var guide = Card(hud, "AR direction", new Vector2(.5f, 0), new Vector2(190, 96), new Vector2(360, 136));
             Label(guide, "AR label", "SAFETY GLASSES / NAVIGASI", new Vector2(0, 40), new Vector2(320, 25), 15, cyan, TextAnchor.MiddleCenter);
             direction = Label(guide, "Direction", "", new Vector2(0, 0), new Vector2(330, 43), 27, green, TextAnchor.MiddleCenter);
@@ -115,7 +126,7 @@ namespace SafeMining
             detectorStatus = Label(sensors, "Sensor status", "", Vector2.zero, new Vector2(500, 74), 18, cyan);
             hazard = Label(hud, "Hazard alert", "", new Vector2(0, 255), new Vector2(720, 55), 24, new Color(1, .45f, .3f), TextAnchor.MiddleCenter);
             controlHints = Label(hud, "Control hints", "", new Vector2(0, -426), new Vector2(1400, 26), 15, muted, TextAnchor.MiddleCenter);
-            equipmentStatus = Label(hud, "FPP equipment", "", new Vector2(0, 417), new Vector2(640, 26), 15, muted, TextAnchor.MiddleCenter);
+            equipmentStatus = Label(hud, "FPP equipment", "", new Vector2(96, 296), new Vector2(620, 26), 15, muted, TextAnchor.MiddleCenter);
             Button(banner, "II", new Vector2(237, 30), new Vector2(36, 34), () => Simulation.TogglePause());
             glasses = Panel(hud, "Safety glasses rim", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, Color.clear);
             foreach (int sx in new[] { -1, 1 }) foreach (int sy in new[] { -1, 1 })
@@ -199,6 +210,7 @@ namespace SafeMining
             }
             observedEdgeSession = session;
             latestVibration = null;
+            vibrationByDevice.Clear();
             latestAppliedHazard = null;
             if (observedEdgeSession != null)
             {
@@ -210,12 +222,21 @@ namespace SafeMining
             }
         }
 
-        void OnVibrationSampled(EdgeStatusMessage sample) { latestVibration = sample; }
+        void OnVibrationSampled(EdgeStatusMessage sample) { vibrationByDevice[sample.deviceId] = sample; }
         void OnHazardApplied(EdgeStatusMessage message) { latestAppliedHazard = message; }
 
         string BuildEdgeFlow(MiningSimulation simulation)
         {
             var session = simulation.EdgeSession;
+            if (simulation.State != SessionState.Menu && simulation.ActiveHazardSource == HazardSource.LegacyTimeline)
+            {
+                edgeFlow.color = muted;
+                return "JADWAL LEGACY > BAHAYA > RUTE\nSumber pembanding; tidak memakai sensor virtual atau MQTT.";
+            }
+            latestVibration = null;
+            foreach (var sampled in vibrationByDevice.Values)
+                if (latestVibration == null || sampled.vibrationNormalized > latestVibration.vibrationNormalized)
+                    latestVibration = sampled;
             if (session == null || latestVibration == null)
             {
                 edgeFlow.color = muted;

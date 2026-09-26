@@ -4,6 +4,8 @@
 
 Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan Play, lalu pilih **Mulai Mode FPP**. Mode Cerita tetap tersedia untuk evakuasi otomatis. Pilihan navigasi adaptif/statis dan skenario berlaku untuk kedua mode.
 
+Pembaruan 27 September: panel kamera kecil di atas radio tim memperlihatkan lokasi longsor pada FPP dan Cerita. Panel muncul sesudah status tertutup diterapkan, mengantre beberapa lokasi, dan tidak mengambil alih kamera utama atau kontrol. Lihat [panduan dan validasi cutscene](UPDATE_IRAWAN_CUTSCENE_2026-09-27.md).
+
 | Kontrol FPP | Fungsi |
 |---|---|
 | WASD | Bergerak, termasuk langkah menyamping |

@@ -39,6 +39,7 @@ namespace SafeMining
         public MiningMqttSettings mqttSettings = new MiningMqttSettings();
         public HazardSource ActiveHazardSource { get; private set; }
         public MiningEdgeSession EdgeSession { get; private set; }
+        public int SessionRevision { get; private set; }
         string edgeError;
         public int ActiveSeed { get; private set; }
         public HazardScenarioMode ActiveScenario { get; private set; }
@@ -273,6 +274,7 @@ namespace SafeMining
         public void Begin(MiningMode mode, bool adaptive)
         {
             if (Actor == null) return;
+            SessionRevision++;
             EdgeSession?.Dispose(); EdgeSession = null; edgeError = null;
             ActiveHazardSource = hazardSource;
             Mode = mode; Adaptive = adaptive; State = SessionState.Running;

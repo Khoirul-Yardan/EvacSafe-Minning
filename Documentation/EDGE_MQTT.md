@@ -4,7 +4,7 @@
 
 Alur aktif adalah **getaran lingkungan → pembacaan sensor virtual → keputusan edge → broker MQTT → subscriber Unity → status lorong → navigasi**. Tidak ada trigger spawn point, jarak pemain, atau collider pemain untuk menyalakan sensor. Titik awal pekerja dan lokasi pemasangan detektor tetap diperlukan sebagai geometri. Jadwal skenario menentukan profil **input getaran**, bukan langsung menutup lorong pada mode edge.
 
-Pekerjaan ini mencakup Orang 1: kontrak, generator, keputusan edge, transport, integrasi, lifecycle, ekspor, pengujian, dan konfigurasi scene. Panel cutscene, kamera close-up, animasi perangkat, serta prefab visual Orang 2 tidak termasuk.
+Implementasi 25 September mencakup Orang 1: kontrak, generator, keputusan edge, transport, integrasi, lifecycle, ekspor, pengujian, dan konfigurasi scene. Pembaruan 27 September menambahkan HUD alur dari `feat/irawan` serta panel kamera longsor di atas dialog untuk Cerita/FPP. Panel membaca status lorong yang sudah diterapkan, tanpa mengubah kontrak atau jalur penerapan edge. Lihat [audit dan panduan cutscene](UPDATE_IRAWAN_CUTSCENE_2026-09-27.md).
 
 ## Menjalankan
 

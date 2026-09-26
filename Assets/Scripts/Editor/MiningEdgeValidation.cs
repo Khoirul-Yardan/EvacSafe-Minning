@@ -22,6 +22,7 @@ public static class MiningEdgeValidation
     static Vector3 initialPosition;
     static bool injectedApplied;
     static int floodSequence;
+    static bool storyCutscene;
     public static void RunBaseline()
     {
         try
@@ -125,6 +126,8 @@ public static class MiningEdgeValidation
             if (simulation == null) simulation = UnityEngine.Object.FindFirstObjectByType<MiningSimulation>();
             if (simulation == null) return;
             frames++; Time.timeScale = phase < 6 ? 15 : 1;
+            var cutscene = simulation.GetComponent<MiningLandslideCutscene>();
+            if (phase == 4 && cutscene != null && cutscene.ActiveDeviceIndex >= 0) storyCutscene = true;
             if (phase == 0)
             {
                 simulation.hazardSource = HazardSource.LocalEdgeSimulation; simulation.scenarioMode = HazardScenarioMode.Scripted;
@@ -135,12 +138,14 @@ public static class MiningEdgeValidation
             {
                 Assert(simulation.HazardLevels[0] == 2 && Vector2.Distance(new Vector2(initialPosition.x, initialPosition.z), new Vector2(simulation.Actor.position.x, simulation.Actor.position.z)) < .01f, "Distant idle FPP did not detect");
                 Assert(simulation.Reroutes > 0, "Edge did not replan");
+                Assert(cutscene != null && cutscene.ActiveDeviceIndex == 0 && cutscene.IsVisible, "Local applied closure did not show FPP cutscene");
                 results.Add("PASS local integration: idle distant FPP detects vibration, closes D01, updates route; direct SetHazard blocked.");
                 previousSession = simulation.EdgeSession.SessionId; simulation.TogglePause(); pausedTime = simulation.Elapsed; mark = frames; phase = 2;
             }
             else if (phase == 2 && frames > mark + 20)
             {
                 Assert(simulation.Elapsed == pausedTime, "Pause advanced clock");
+                Assert(cutscene.ActiveDeviceIndex == 0 && !cutscene.FeedCamera.enabled, "Paused cutscene advanced or kept rendering");
                 simulation.scenarioMode = HazardScenarioMode.NoHazards; simulation.Begin(MiningMode.FirstPerson, true);
                 Assert(previousSession != simulation.EdgeSession.SessionId && simulation.HazardLevels.All(l => l == 0), "Reset leaked state");
                 var body = simulation.Actor.GetComponent<CharacterController>(); body.enabled = false;
@@ -149,12 +154,14 @@ public static class MiningEdgeValidation
             else if (phase == 3 && simulation.Elapsed > 3)
             {
                 Assert(simulation.HazardLevels.All(l => l == 0), "Proximity caused an alarm without vibration");
+                Assert(cutscene.ActiveDeviceIndex == -1 && cutscene.PendingCount == 0 && !cutscene.FeedCamera.enabled, "Reset retained cutscene");
                 results.Add("PASS pause/reset/proximity: clock frozen, new session clears closure, standing at a normal detector triggers nothing.");
                 simulation.scenarioMode = HazardScenarioMode.Scripted; simulation.Begin(MiningMode.Story, true); phase = 4;
             }
             else if (phase == 4 && simulation.State != SafeMining.SessionState.Running)
             {
                 Assert(simulation.State == SafeMining.SessionState.Success && simulation.Reroutes > 0, "Adaptive edge story failed");
+                Assert(storyCutscene, "Story mode never showed applied landslide cutscene");
                 simulation.Begin(MiningMode.Story, false); phase = 5;
             }
             else if (phase == 5 && simulation.State != SafeMining.SessionState.Running)
@@ -168,6 +175,8 @@ public static class MiningEdgeValidation
             else if (phase == 6 && simulation.Elapsed > 13 && simulation.HazardLevels[0] == 2)
             {
                 Assert(applied > 0 && !simulation.EdgeSession.DataLoss, "MQTT apply failed");
+                Assert(cutscene.ActiveDeviceIndex == 0 && cutscene.IsVisible, "MQTT closure did not show cutscene");
+                results.Add("PASS cutscene: applied local/MQTT closures show FPP inset; story inset observed; pause freezes shot and disables rendering; reset clears queue.");
                 results.Add("PASS Mosquitto: real QoS 1 publish/subscribe returns decisions, applies closure and reroute to idle FPP.");
                 simulation.TogglePause(); pausedTime = simulation.Elapsed; applied = 0;
                 injector = new MiningMqttClient(new MiningMqttSettings(), simulation.EdgeSession.SessionId);
@@ -210,6 +219,7 @@ public static class MiningEdgeValidation
             else if (phase == 11 && simulation.Elapsed > 13)
             {
                 Assert(simulation.HazardLevels.All(l => l == 0) && simulation.EdgeSession.DataStale, "Unavailable broker silently applied locally");
+                Assert(cutscene.ActiveDeviceIndex == -1 && !cutscene.FeedCamera.enabled, "Unreceived MQTT decision triggered cutscene");
                 results.Add("PASS unavailable broker: edge decisions continue, no local fallback, no hazard applied, data marked stale.");
                 simulation.Export(); Assert(simulation.ExportStatus.StartsWith("CSV tersimpan"), "Export failed");
                 simulation.mqttSettings.port = 1883; simulation.scenarioMode = HazardScenarioMode.NoHazards;

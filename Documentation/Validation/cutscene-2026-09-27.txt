@@ -1,0 +1,9 @@
+Unity 6000.3.23f1 / Windows / 2026-09-27
+Project copy: .tools/ValidationProject
+Runner: MiningCutsceneValidation.RunBatch (graphics enabled, 1600x900 captures)
+
+PASS FPP: warning hidden; three simultaneous closures queued D01/D02/D03; 5-second shots; pause freezes; duplicate closure ignored; main camera/actor/audio unchanged.
+PASS Story: inset and multi-site queue visible; restart clears active/pending shots; same device can trigger in new session; menu disables camera.
+ALL CUTSCENE CHECKS PASSED
+
+Log note: Unity Editor Search.SearchDatabase raised an ArgumentOutOfRangeException during startup indexing; the runtime checks completed successfully with exit code 0. No gameplay script exception or compile error. Player builds and other aspect ratios not tested.

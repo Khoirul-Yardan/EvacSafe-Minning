@@ -1,8 +1,12 @@
 # SAFE-MINING EVAC
 
-Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP manual**, getaran virtual, keputusan edge, MQTT, serta navigasi **adaptif** dan **statis**. Pembaruan: 25 September 2026.
+Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP manual**, getaran virtual, keputusan edge, MQTT, serta navigasi **adaptif** dan **statis**. Pembaruan: 27 September 2026.
 
-Alur bawaan: **getaran lingkungan → edge virtual → broker MQTT → Unity → bahaya dan navigasi**. Sensor tidak dipicu spawn point atau kedekatan pemain. Implementasi ini mencakup pekerjaan Orang 1; cutscene Orang 2 tidak ditambahkan. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
+[Deskripsi lengkap simulasi dan perbedaan sebelum/sesudah MQTT](Documentation/Deskripsi%20lengkap.md).
+
+Alur bawaan: **getaran lingkungan → edge virtual → broker MQTT → Unity → bahaya dan navigasi**. Sensor tidak dipicu spawn point atau kedekatan pemain. HUD menampilkan alur deteksi dan panel kamera longsor kecil di atas dialog pada FPP maupun Cerita. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
+
+Panel cutscene muncul saat lorong benar-benar tertutup, menampilkan lokasi perangkat selama lima detik, dan mengantre beberapa lokasi secara bergantian. Kamera utama dan kontrol tetap berjalan. [Integrasi feat/irawan, audit dokumentasi, dan panduan cutscene](Documentation/UPDATE_IRAWAN_CUTSCENE_2026-09-27.md).
 
 Jalankan broker lokal sebelum memulai mode MQTT (Docker Desktop harus aktif):
 
