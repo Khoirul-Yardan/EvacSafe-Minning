@@ -14,11 +14,15 @@ namespace SafeMining
         readonly Color panel = new Color(.045f, .052f, .055f, .89f);
         Font font;
         Transform canvas, menu, hud, modal, glasses;
-        Text phase, mode, dialogue, direction, distance, metrics, hazard, timer, modalTitle, modalBody, exportStatus, navButtonLabel, scenarioLabel, detectorStatus;
+        Text phase, mode, dialogue, direction, distance, metrics, hazard, timer, modalTitle, modalBody, exportStatus, navButtonLabel, scenarioLabel, detectorStatus, edgeFlow;
         Text controlHints, equipmentStatus;
         bool adaptive = true;
         Image dangerWash;
         MineMapGraphic map;
+        MiningEdgeSession observedEdgeSession;
+        EdgeStatusMessage latestVibration;
+        EdgeStatusMessage latestAppliedHazard;
+        float warningThreshold, dangerThreshold;
 
         void Start()
         {
@@ -88,6 +92,9 @@ namespace SafeMining
             var banner = Card(hud, "Mission", new Vector2(0, 1), new Vector2(298, -79), new Vector2(540, 110));
             mode = Label(banner, "Mode", "", new Vector2(0, 28), new Vector2(496, 28), 16, cyan);
             phase = Label(banner, "Phase", "", new Vector2(0, -12), new Vector2(496, 48), 24, Color.white);
+            var flow = Card(hud, "Sensor edge broker route", new Vector2(.5f, 1), new Vector2(0, -79), new Vector2(620, 110));
+            Label(flow, "Pipeline heading", "ALUR DETEKSI  /  SENSOR  >  EDGE  >  MQTT  >  RUTE", new Vector2(0, 31), new Vector2(588, 25), 15, cyan);
+            edgeFlow = Label(flow, "Pipeline status", "Menunggu sesi simulasi", new Vector2(0, -13), new Vector2(588, 60), 16, Color.white);
             var radar = Card(hud, "Map", new Vector2(1, 1), new Vector2(-151, -200), new Vector2(246, 352));
             Label(radar, "Map label", "PETA EVAKUASI  /  N", new Vector2(0, 146), new Vector2(214, 28), 17, cyan);
             var mapObject = new GameObject("Live mine topology", typeof(RectTransform), typeof(CanvasRenderer), typeof(MineMapGraphic)); mapObject.transform.SetParent(radar, false);
@@ -145,6 +152,7 @@ namespace SafeMining
         {
             if (menu == null) return;
             var s = Simulation;
+            ObserveEdgeSession(s.EdgeSession);
             menu.gameObject.SetActive(s.State == SessionState.Menu);
             hud.gameObject.SetActive(s.State != SessionState.Menu);
             bool showResult = s.State == SessionState.Paused || s.State == SessionState.Success || s.State == SessionState.Blocked;
@@ -154,6 +162,7 @@ namespace SafeMining
             equipmentStatus.text = s.Mode == MiningMode.FirstPerson ? "LAMPU HELM " + (s.HeadlampEnabled ? "ON" : "OFF") + "   /   NAVIGASI AR " + (s.GlassesEnabled ? "ON" : "OFF") : "";
             scenarioLabel.text = "Skenario: " + s.scenarioMode + "  |  Seed " + s.scenarioSeed + "  |  R dan ulang memakai seed yang sama";
             detectorStatus.text = "JARINGAN DETEKTOR  /  " + s.Detectors.Length + " titik\n" + s.LastDetectorAlert;
+            edgeFlow.text = BuildEdgeFlow(s);
             phase.text = s.Phase;
             dialogue.text = s.Dialogue;
             bool hasGlasses = s.Mode == MiningMode.Story || s.GlassesEnabled;
@@ -178,6 +187,66 @@ namespace SafeMining
                     "\nRespons hitung maks.  " + s.MaxResponseMs.ToString("F3") + " ms";
                 exportStatus.text = string.IsNullOrEmpty(s.ExportStatus) ? "Paparan = waktu di perimeter bahaya. Respons = waktu komputasi lokal, bukan latensi jaringan.\nUlangi skenario dengan baseline statis untuk membandingkan hasil." : s.ExportStatus;
             }
+        }
+
+        void ObserveEdgeSession(MiningEdgeSession session)
+        {
+            if (observedEdgeSession == session) return;
+            if (observedEdgeSession != null)
+            {
+                observedEdgeSession.VibrationSampled -= OnVibrationSampled;
+                observedEdgeSession.HazardApplied -= OnHazardApplied;
+            }
+            observedEdgeSession = session;
+            latestVibration = null;
+            latestAppliedHazard = null;
+            if (observedEdgeSession != null)
+            {
+                var settings = observedEdgeSession.Settings;
+                warningThreshold = settings.warningThreshold;
+                dangerThreshold = settings.dangerThreshold;
+                observedEdgeSession.VibrationSampled += OnVibrationSampled;
+                observedEdgeSession.HazardApplied += OnHazardApplied;
+            }
+        }
+
+        void OnVibrationSampled(EdgeStatusMessage sample) { latestVibration = sample; }
+        void OnHazardApplied(EdgeStatusMessage message) { latestAppliedHazard = message; }
+
+        string BuildEdgeFlow(MiningSimulation simulation)
+        {
+            var session = simulation.EdgeSession;
+            if (session == null || latestVibration == null)
+            {
+                edgeFlow.color = muted;
+                return "Sensor virtual menunggu sesi dimulai.\nNilai getaran ditampilkan sebagai skala simulasi (0–1), bukan satuan sensor fisik.";
+            }
+
+            var sample = latestVibration;
+            string reading = sample.deviceId + "  GETARAN SIM " + sample.vibrationNormalized.ToString("F2") +
+                "  |  AMBANG " + warningThreshold.ToString("F2") + "/" + dangerThreshold.ToString("F2");
+            string level = LevelName(sample.level);
+            string transport = session.Source == HazardSource.MqttEdgeSimulation
+                ? session.TransportStatus
+                : "EDGE LOKAL (tanpa MQTT)";
+            string applied = latestAppliedHazard == null
+                ? "menunggu status dari edge"
+                : latestAppliedHazard.deviceId + " " + LevelName(latestAppliedHazard.level) + " diterapkan";
+            string route = simulation.TargetExit >= 0 ? "EXIT " + (simulation.TargetExit + 1) : "mencari exit";
+            edgeFlow.color = sample.level == 2 ? new Color(1f, .48f, .40f) : sample.level == 1 ? new Color(1f, .78f, .38f) : Color.white;
+            return reading + "\nEDGE " + level + "  >  " + transport + "  >  " + applied + "  >  RUTE " + route;
+        }
+
+        static string LevelName(int level)
+        {
+            return level == 2 ? "TERTUTUP" : level == 1 ? "WASPADA" : "NORMAL";
+        }
+
+        void OnDestroy()
+        {
+            if (observedEdgeSession == null) return;
+            observedEdgeSession.VibrationSampled -= OnVibrationSampled;
+            observedEdgeSession.HazardApplied -= OnHazardApplied;
         }
     }
 
