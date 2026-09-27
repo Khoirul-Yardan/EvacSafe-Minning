@@ -201,7 +201,7 @@ public static class MiningEdgeValidation
             {
                 results.Add("PASS MQTT pause/resume: incoming decision waits until resume; malformed JSON and duplicate rejected.");
                 injector.Dispose(); injector = null;
-                // Force an actual socket failure; adapter must reconnect and republish latest edge snapshots.
+                // Force a socket failure; Unity reconnects and replays samples to the Python edge.
                 var mqtt = (MiningMqttClient)typeof(MiningEdgeSession).GetField("mqtt", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(simulation.EdgeSession);
                 ((System.Net.Sockets.TcpClient)typeof(MiningMqttClient).GetField("socket", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mqtt)).Close();
                 realMark = EditorApplication.timeSinceStartup; phase = 10;
@@ -212,8 +212,8 @@ public static class MiningEdgeValidation
                 simulation.EdgeSession.Export("Validation/mqtt-session");
                 var trace = File.ReadAllText("Validation/mqtt-session_edge.jsonl");
                 Assert(trace.Split(new[] { "\"stage\":\"connected\"" }, StringSplitOptions.None).Length >= 3, "Did not reconnect");
-                Assert(trace.Contains("publish_wire") && trace.Contains("receive") && trace.Contains("reject") && trace.Contains("route"), "Missing pipeline trace");
-                results.Add("PASS MQTT reconnect: socket failure detected, broker reconnected, snapshots republished, closure preserved, full trace exported.");
+                Assert(trace.Contains("sample_publish_queued") && trace.Contains("receive") && trace.Contains("reject") && trace.Contains("route"), "Missing pipeline trace");
+                results.Add("PASS MQTT reconnect: socket failure detected, broker reconnected, sensor samples replayed to edge, closure preserved, trace exported.");
                 simulation.mqttSettings.port = 18889; simulation.Begin(MiningMode.FirstPerson, true); phase = 11;
             }
             else if (phase == 11 && simulation.Elapsed > 13)

@@ -40,6 +40,7 @@ namespace SafeMining
         readonly Action<int, int> apply;
         readonly MiningMqttClient mqtt;
         readonly long[] sequences;
+        readonly long[] sampleSequences;
         readonly float[] values;
         readonly bool[] received;
         readonly float[] receivedAt;
@@ -61,7 +62,7 @@ namespace SafeMining
             settings.Validate(); this.settings = settings.Copy(); this.broker = broker.Copy();
             Source = source; this.apply = apply; LayoutId = LayoutHash(cells, devices);
             generator = new MiningVibrationGenerator(seed, profiles, settings);
-            processors = new MiningEdgeProcessor[devices.Count]; sequences = new long[devices.Count]; values = new float[devices.Count]; received = new bool[devices.Count];
+            processors = new MiningEdgeProcessor[devices.Count]; sequences = new long[devices.Count]; sampleSequences = new long[devices.Count]; values = new float[devices.Count]; received = new bool[devices.Count];
             receivedAt = new float[devices.Count];
             for (int i = 0; i < processors.Length; i++) processors[i] = new MiningEdgeProcessor(settings);
             validator = new MiningEdgeValidator(SessionId, LayoutId, devices.Count);
@@ -115,21 +116,38 @@ namespace SafeMining
                 for (int i = 0; i < processors.Length && stillRunning(); i++)
                 {
                     values[i] = generator.Sample(i, tick);
-                    bool changed = processors[i].Sample(values[i], settings.sampleInterval);
-                    var sample = Message(i, changed);
-                    Record("sample", sample, ""); VibrationSampled?.Invoke(sample);
-                    if (changed)
+                    if (mqtt != null)
                     {
-                        var decision = sample;
-                        Record("decision", decision, ""); EdgeStateChanged?.Invoke(decision); Send(decision);
+                        var input = new EdgeSampleMessage { sessionId = SessionId, layoutId = LayoutId,
+                            deviceId = "D" + (i + 1).ToString("00"), sequence = ++sampleSequences[i],
+                            simulationTimeS = (float)(tick * (double)settings.sampleInterval), vibrationNormalized = values[i],
+                            warningThreshold = settings.warningThreshold, dangerThreshold = settings.dangerThreshold,
+                            clearThreshold = settings.clearThreshold, minimumDurationS = settings.minimumDuration,
+                            clearDurationS = settings.clearDuration };
+                        Record("sample", null, JsonUtility.ToJson(input));
+                        VibrationSampled?.Invoke(new EdgeStatusMessage { deviceId = input.deviceId,
+                            sequence = input.sequence, simulationTimeS = input.simulationTimeS,
+                            vibrationNormalized = input.vibrationNormalized, level = -1, source = input.source });
+                        Record(mqtt.Publish(input.Topic, JsonUtility.ToJson(input)) ? "sample_publish_queued" : "sample_publish_unavailable", null, JsonUtility.ToJson(input));
+                    }
+                    else
+                    {
+                        bool changed = processors[i].Sample(values[i], settings.sampleInterval);
+                        var sample = Message(i, changed);
+                        Record("sample", sample, ""); VibrationSampled?.Invoke(sample);
+                        if (changed)
+                        {
+                            var decision = sample;
+                            Record("decision", decision, ""); EdgeStateChanged?.Invoke(decision); Send(decision);
+                        }
                     }
                 }
-                if (tick % Math.Max(1, (int)Math.Round(1 / settings.sampleInterval)) == 0) Snapshot(stillRunning);
+                if (mqtt == null && tick % Math.Max(1, (int)Math.Round(1 / settings.sampleInterval)) == 0) Snapshot(stillRunning);
             }
             if (mqtt != null && mqtt.Connected && generation != mqtt.Generation && stillRunning())
             {
                 generation = mqtt.Generation; Array.Clear(received, 0, received.Length); DataStale = true;
-                Snapshot(stillRunning);
+                PublishSampleSnapshot(stillRunning);
             }
         }
         EdgeStatusMessage Message(int device, bool advance)
@@ -143,6 +161,18 @@ namespace SafeMining
         }
         void Snapshot(Func<bool> stillRunning)
         { for (int i = 0; i < processors.Length && stillRunning(); i++) Send(Message(i, true)); }
+        void PublishSampleSnapshot(Func<bool> stillRunning)
+        {
+            for (int i = 0; i < values.Length && stillRunning(); i++)
+            {
+                var sample = new EdgeSampleMessage { sessionId = SessionId, layoutId = LayoutId,
+                    deviceId = "D" + (i + 1).ToString("00"), sequence = ++sampleSequences[i],
+                    simulationTimeS = time, vibrationNormalized = values[i], warningThreshold = settings.warningThreshold,
+                    dangerThreshold = settings.dangerThreshold, clearThreshold = settings.clearThreshold,
+                    minimumDurationS = settings.minimumDuration, clearDurationS = settings.clearDuration };
+                Record(mqtt.Publish(sample.Topic, JsonUtility.ToJson(sample)) ? "sample_snapshot_queued" : "sample_snapshot_unavailable", null, JsonUtility.ToJson(sample));
+            }
+        }
         void Send(EdgeStatusMessage message)
         {
             if (mqtt == null) { Record("local_delivery", message, ""); Apply(message.Topic, message); }
@@ -159,6 +189,7 @@ namespace SafeMining
             DataStale = Array.IndexOf(received, false) >= 0;
             for (int i = 0; i < received.Length; i++) if (time - receivedAt[i] > 3) DataStale = true;
             Record("apply", message, "");
+            if (mqtt != null) EdgeStateChanged?.Invoke(message);
             if (pendingRoute != null) Record("route", message, pendingRoute);
             HazardApplied?.Invoke(message);
         }

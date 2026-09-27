@@ -642,7 +642,8 @@ namespace SafeMining
             var sample = latestVibration;
             string reading = sample.deviceId + "  GETARAN SIM " + sample.vibrationNormalized.ToString("F2") +
                 "  |  AMBANG " + warningThreshold.ToString("F2") + "/" + dangerThreshold.ToString("F2");
-            string level = LevelName(sample.level);
+            int edgeLevel = sample.level < 0 ? latestAppliedHazard?.level ?? -1 : sample.level;
+            string level = edgeLevel < 0 ? "MENUNGGU KEPUTUSAN" : LevelName(edgeLevel);
             string transport = session.Source == HazardSource.MqttEdgeSimulation
                 ? session.TransportStatus
                 : "EDGE LOKAL (tanpa MQTT)";
@@ -650,7 +651,7 @@ namespace SafeMining
                 ? "menunggu status dari edge"
                 : latestAppliedHazard.deviceId + " " + LevelName(latestAppliedHazard.level) + " diterapkan";
             string route = simulation.TargetExit >= 0 ? "EXIT " + (simulation.TargetExit + 1) : "mencari exit";
-            edgeFlow.color = sample.level == 2 ? new Color(1f, .48f, .40f) : sample.level == 1 ? new Color(1f, .78f, .38f) : Color.white;
+            edgeFlow.color = edgeLevel == 2 ? new Color(1f, .48f, .40f) : edgeLevel == 1 ? new Color(1f, .78f, .38f) : edgeLevel < 0 ? muted : Color.white;
             return reading + "\nEDGE " + level + "  >  " + transport + "  >  " + applied + "  >  RUTE " + route;
         }
 

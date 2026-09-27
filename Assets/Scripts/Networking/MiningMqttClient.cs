@@ -33,7 +33,7 @@ namespace SafeMining
             public string stage, detail;
             public double monotonicMs;
         }
-        sealed class Pending { public byte[] body; public string payload; public double sent; public int attempts; }
+        sealed class Pending { public byte[] body; public string payload, topic; public double sent; public int attempts; }
         const int Capacity = 256;
         readonly ConcurrentQueue<Delivery> incoming = new ConcurrentQueue<Delivery>();
         readonly ConcurrentQueue<Delivery> outgoing = new ConcurrentQueue<Delivery>();
@@ -140,7 +140,11 @@ namespace SafeMining
                     else if (header == 0x40 && reply.Length == 2)
                     {
                         int id = reply[0] * 256 + reply[1];
-                        if (pending.TryGetValue(id, out var acknowledged)) { pending.Remove(id); NoticeEvent("puback", acknowledged.payload); }
+                        if (pending.TryGetValue(id, out var acknowledged))
+                        {
+                            pending.Remove(id);
+                            if (!acknowledged.topic.Contains("/sensor/")) NoticeEvent("puback", acknowledged.payload);
+                        }
                     }
                     else if (header == 0xD0 && reply.Length == 0) pingSent = -1;
                     else throw new IOException("Unexpected MQTT packet");
@@ -150,8 +154,8 @@ namespace SafeMining
                     do { packetId = packetId % 65535 + 1; } while (pending.ContainsKey(packetId));
                     body.Clear(); Utf8(body, delivery.topic); U16(body, packetId); body.AddRange(StrictUtf8.GetBytes(delivery.payload));
                     var bytes = body.ToArray(); Write(stream, 0x32, bytes);
-                    pending[packetId] = new Pending { body = bytes, payload = delivery.payload, sent = now, attempts = 1 };
-                    NoticeEvent("publish_wire", delivery.payload);
+                    pending[packetId] = new Pending { body = bytes, payload = delivery.payload, topic = delivery.topic, sent = now, attempts = 1 };
+                    if (!delivery.topic.Contains("/sensor/")) NoticeEvent("publish_wire", delivery.payload);
                 }
                 foreach (var item in pending.Values)
                     if (now - item.sent > 2)

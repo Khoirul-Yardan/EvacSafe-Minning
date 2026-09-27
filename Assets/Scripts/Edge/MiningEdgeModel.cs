@@ -49,6 +49,17 @@ namespace SafeMining
         public string Topic => "safe-mining/v1/" + sessionId + "/edge/" + deviceId + "/status";
     }
 
+    [Serializable]
+    public class EdgeSampleMessage
+    {
+        public int schemaVersion = 1;
+        public string sessionId, layoutId, deviceId, source = "unity-sensor-simulation";
+        public long sequence;
+        public float simulationTimeS, vibrationNormalized, warningThreshold, dangerThreshold, clearThreshold,
+            minimumDurationS, clearDurationS;
+        public string Topic => "safe-mining/v1/" + sessionId + "/sensor/" + deviceId + "/sample";
+    }
+
     public sealed class MiningEdgeProcessor
     {
         readonly MiningEdgeSettings settings;
@@ -111,7 +122,7 @@ namespace SafeMining
         public bool Accept(string topic, EdgeStatusMessage m, float now, out int device, out string reason)
         {
             device = -1; reason = "invalid_contract";
-            if (m == null || m.schemaVersion != 1 || m.source != "virtual-edge" || m.level < 0 || m.level > 2 ||
+            if (m == null || m.schemaVersion != 1 || (m.source != "virtual-edge" && m.source != "python-edge" && m.source != "hardware-edge") || m.level < 0 || m.level > 2 ||
                 float.IsNaN(m.vibrationNormalized) || float.IsInfinity(m.vibrationNormalized) || m.vibrationNormalized < 0 || m.vibrationNormalized > 1 ||
                 float.IsNaN(m.simulationTimeS) || float.IsInfinity(m.simulationTimeS) || m.simulationTimeS < 0 || m.simulationTimeS > now + .001f ||
                 m.sequence <= 0 || string.IsNullOrEmpty(m.deviceId)) return false;

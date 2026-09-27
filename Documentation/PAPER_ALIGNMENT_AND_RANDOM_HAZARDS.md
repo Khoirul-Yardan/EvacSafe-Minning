@@ -1,6 +1,6 @@
 # Kesesuaian paper, longsor acak, dan perangkat deteksi
 
-> Pembaruan 25 September 2026: sumber bawaan scene utama kini getaran ? edge virtual ? MQTT, tanpa trigger posisi/spawn pemain. Keterangan timeline/WebSocket/sensor tanpa pengolahan pada dokumen ini menjelaskan baseline sebelumnya. Implementasi terkini, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
+> Pembaruan 27 September 2026: jalur MQTT kini mengirim sampel dari Unity ke layanan keputusan edge Python terpisah, lalu menerima status untuk memperbarui bahaya dan rute. Sensor/getaran masih virtual dan planner tetap C# lokal. Implementasi terkini, kontrak perangkat, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
 
 Pembaruan 23 September 2026. Dokumen ini menggantikan keterangan tentang tiga lokasi bahaya tetap, timeline tunggal, dan BFS tanpa bobot pada update sebelumnya.
 
@@ -8,7 +8,7 @@ Pembaruan 23 September 2026. Dokumen ini menggantikan keterangan tentang tiga lo
 
 PDF lokal pengguna: `C:\Users\ACER NITRO\Downloads\Full Paper Mahasiswa EPW 17.docx.pdf`, enam halaman, berjudul **Towards SAFE-MINING EVAC: Perancangan Simulasi Navigasi Evakuasi Adaptif Berbasis Unity dan Edge Intelligence pada Area Tambang Bawah Tanah**. Pemeriksaan mencakup teks serta gambar tahapan penelitian di halaman 3 dan arsitektur empat lapisan di halaman 4. File PDF asli tidak diubah.
 
-**Kesimpulan: implementasi sesuai dengan arah prototipe simulasi dalam paper, tetapi belum memenuhi seluruh rincian rancangan maupun evaluasi penelitian.** Paper memang menempatkan integrasi perangkat keras sebagai pengembangan berikutnya. Namun, modul Python untuk pemrosesan edge dan eksperimen penelitian lengkap yang disebut pada metode belum tersedia dalam implementasi saat ini.
+**Kesimpulan: implementasi sesuai dengan arah prototipe simulasi dalam paper, tetapi belum memenuhi seluruh rincian rancangan maupun evaluasi penelitian.** Paper memang menempatkan integrasi perangkat keras sebagai pengembangan berikutnya. Pemrosesan edge Python dan jalur MQTT tersedia sebagai proses terpisah; sensor fisik, planner Python, serta eksperimen penelitian lengkap belum tersedia.
 
 | Bagian paper | Status setelah update | Batas / tindak lanjut |
 |---|---|---|
@@ -17,8 +17,8 @@ PDF lokal pengguna: `C:\Users\ACER NITRO\Downloads\Full Paper Mahasiswa EPW 17.d
 | Hal. 3-4: posisi virtual sebagai pengganti UWB | Posisi aktual aktor Unity menjadi input planner dan telemetry | Representasi koordinat virtual ideal; tidak mensimulasikan anchor, ranging, noise, atau ketelitian UWB |
 | Hal. 3-4: graf dengan jarak, risiko dan keterlintasan | Planner berbobot jarak + penalti waspada; sel tertutup dilarang | Risiko bersifat diskret dan heuristik; belum model probabilistik atau optimasi multiobjektif waktu/risiko |
 | Hal. 4: data ingestion, pembaruan lingkungan, risk assessment, route planner | Alur logis tersedia dalam proses Unity | Belum empat layanan/proses terpisah; penilaian risiko saat ini pemetaan status ke penalti |
-| Hal. 3: Python untuk pemrosesan/pengambilan keputusan edge | Belum sesuai sepenuhnya: planner masih C# lokal | `Tools/telemetry_server.py` adalah server contoh, bukan planner Python |
-| Hal. 1, 3: MQTT atau WebSocket | Adapter WebSocket tersedia; snapshot memuat lokasi detektor dan seed | MQTT tidak diperlukan jika memilih WebSocket, tetapi loop Unity -> planner Python -> rute belum diimplementasikan |
+| Hal. 3: Python untuk pemrosesan/pengambilan keputusan edge | Sebagian tersedia: edge Python memproses sampel MQTT; planner rute masih C# lokal | `Tools/Edge/edge_service.py` mengolah ambang getaran dan status bahaya, bukan planner rute Python |
+| Hal. 1, 3: MQTT atau WebSocket | Adapter MQTT dan WebSocket tersedia; jalur MQTT memisahkan edge Python dari Unity | Planner/rute tetap C#; WebSocket tidak menjalankan alur keputusan edge Python |
 | Hal. 1-2: perbandingan statis vs adaptif | Kedua metode tersedia dengan replay jadwal yang sama | Hasil uji regresi belum menggantikan eksperimen lintas denah/seed dan analisis hasil penelitian |
 | Hal. 1: waktu, keamanan jalur, reroute, respons | CSV summary/events/layout/scenario dan konfigurasi JSON | Paparan virtual bukan prediksi cedera; respons yang diukur masih waktu komputasi lokal, bukan end-to-end jaringan |
 
@@ -111,7 +111,7 @@ Kalimat pembahasan yang sesuai dengan implementasi:
 
 ## Pekerjaan yang masih diperlukan untuk memenuhi paper sepenuhnya
 
-- Implementasi planner/modul pemrosesan Python jika arsitektur tersebut tetap diklaim di metode; alternatifnya, sesuaikan metode paper secara eksplisit menjadi prototipe pemrosesan lokal C#.
+- Implementasi planner Python jika arsitektur tersebut tetap diklaim di metode; alternatifnya, jelaskan bahwa planner prototipe tetap lokal C# dan hanya pemrosesan edge memakai Python melalui MQTT.
 - Instrumen pengukuran end-to-end jika istilah waktu respons sistem mencakup komunikasi, penerimaan data, keputusan, dan tampilan.
 - Eksperimen lintas denah/seed dengan data nyata dari sesi, tabel/grafik, analisis kegagalan, serta kesimpulan berdasarkan hasil tersebut.
 - Penyelarasan istilah UWB virtual, bobot risiko, satu pekerja, dan validasi awal agar paper tidak mengklaim fitur fisik/model yang belum diuji.
