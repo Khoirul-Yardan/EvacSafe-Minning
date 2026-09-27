@@ -1,5 +1,5 @@
-# Tahap 1: pemeriksaan tanpa lisensi Unity dan tanpa mengunduh berkas Git LFS
-# (kuota bandwidth LFS pemilik repo tetap aman). CI Unity via GameCI menyusul setelah 30 Sep.
+# Stage 1: checks that need no Unity license and never download Git LFS objects
+# (keeps the repo owner's LFS bandwidth quota intact). Unity CI via GameCI follows after Sep 30.
 name: CI
 
 on:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   repo-hygiene:
-    name: Kebersihan repo Unity dan dokumentasi
+    name: Unity repo hygiene and docs
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -28,13 +28,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Pasangan .meta, versi Unity, berkas lokal, ukuran berkas
+      - name: Check .meta pairs, Unity version, local files, and file sizes
         run: python Tools/CI/check_unity_repo.py
-      - name: Tautan antardokumen
+      - name: Check documentation links
         run: python Tools/CI/check_doc_links.py
 
   edge-python:
-    name: Edge Python dan konfigurasi broker
+    name: Python edge and broker config
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,10 +43,10 @@ jobs:
           lfs: false
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"  # Sama dengan image Tools/Edge/Dockerfile.
-      - name: Sintaks skrip Python
+          python-version: "3.12"  # Matches the Tools/Edge/Dockerfile image.
+      - name: Check Python syntax
         run: python -m py_compile Tools/Edge/edge_service.py Tools/telemetry_server.py Tools/CI/*.py
-      - name: Unit test logika keputusan edge
+      - name: Run edge decision unit tests
         run: python -m unittest discover -s Tools/Edge/tests -v
-      - name: Validasi docker compose
+      - name: Validate docker compose
         run: docker compose --profile simulated-edge -f Tools/Mqtt/compose.yaml config --quiet

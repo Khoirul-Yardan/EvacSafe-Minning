@@ -18,12 +18,12 @@ Workflow `.github/workflows/ci.yml` berjalan pada setiap push dan PR ke `main`. 
 
 | Job | Pemeriksaan | Alasan |
 |---|---|---|
-| Kebersihan repo Unity dan dokumentasi | Setiap aset dan folder di `Assets/` punya `.meta`, tidak ada `.meta` yatim | `.meta` yang hilang memutus referensi scene/prefab |
+| Unity repo hygiene and docs | Setiap aset dan folder di `Assets/` punya `.meta`, tidak ada `.meta` yatim | `.meta` yang hilang memutus referensi scene/prefab |
 | | `ProjectVersion.txt` tetap 6000.3.23f1 | Mencegah proyek tak sengaja di-upgrade/downgrade |
 | | Tidak ada `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `.sln`, `.csproj` | Berkas lokal dan hasil build |
 | | Berkas ≥50 MB di luar LFS gagal, ≥10 MB diberi peringatan | Batas GitHub dan ukuran clone |
 | | Tautan relatif antardokumen Markdown tidak rusak | Dokumentasi dibaca juri dan anggota tim |
-| Edge Python dan konfigurasi broker | Sintaks skrip Python | |
+| Python edge and broker config | Sintaks skrip Python | |
 | | Unit test logika keputusan `Tools/Edge/edge_service.py` | Ambang, durasi minimum, lonjakan singkat, latch longsor, hysteresis, jeda sampel, heartbeat, validasi input |
 | | `docker compose config` untuk broker dan edge Python | Compose rusak menggagalkan demo MQTT |
 
@@ -52,7 +52,7 @@ Cara mengaktifkan, pilih salah satu:
 **Tahap 2 (setelah submission):** edit ruleset yang sama dan tambahkan:
 
 - *Require a pull request before merging*, 1 approval, *Require review from Code Owners*.
-- *Require status checks to pass*: `Kebersihan repo Unity dan dokumentasi` dan `Edge Python dan konfigurasi broker`.
+- *Require status checks to pass*: `Unity repo hygiene and docs` dan `Python edge and broker config`.
 - Job CI Unity (compile, runner validasi, build Windows) memakai GameCI dengan lisensi Unity yang disimpan sebagai secret repo.
 
 ## Kepemilikan berkas
