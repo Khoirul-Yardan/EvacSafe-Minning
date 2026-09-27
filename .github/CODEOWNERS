@@ -1,0 +1,32 @@
+# Pemilik berkas mengikuti pembagian tugas tim (Documentation/DEVELOPMENT_WORKFLOW.md).
+# Baris terakhir yang cocok berlaku. Pola "*" di akhir nama berkas ikut mencakup .meta-nya.
+# Tahap 1: pemilik otomatis diminta review. Tahap 2 (setelah 30 Sep): review pemilik diwajibkan.
+
+*                                              @Khoirul-Yardan
+
+# Orang 1: getaran, edge, MQTT, sesi, dan integrasi scene
+/Assets/Scripts/Edge/                          @Khoirul-Yardan
+/Assets/Scripts/Networking/                    @Khoirul-Yardan
+/Assets/Scripts/MiningSimulation.cs*           @Khoirul-Yardan
+/Assets/Scripts/MiningHazardScenario.cs*       @Khoirul-Yardan
+/Assets/Scripts/MiningTelemetry.cs*            @Khoirul-Yardan
+/Assets/Scripts/MineLayout.cs*                 @Khoirul-Yardan
+/Assets/Scenes/SafeMining_Experience.unity*    @Khoirul-Yardan
+
+# Edge Python dan broker
+/Tools/Edge/                                   @Maaulln @Khoirul-Yardan
+/Tools/Mqtt/                                   @Khoirul-Yardan @Maaulln
+
+# Orang 2: UI, cutscene, dan visual perangkat
+/Assets/Scripts/MiningHUD.cs*                  @RockHead07 @Maaulln
+/Assets/Scripts/MiningLandslideCutscene.cs*    @RockHead07 @Maaulln
+/Assets/Scripts/MiningLandslideDetector.cs*    @RockHead07 @Maaulln
+/Assets/Resources/Mining/                      @RockHead07 @Maaulln
+
+# Pengaturan global yang dikunci selama pengembangan
+/ProjectSettings/                              @Khoirul-Yardan
+/Packages/                                     @Khoirul-Yardan
+
+# CI dan aturan repo
+/.github/                                      @Khoirul-Yardan @RockHead07
+/Tools/CI/                                     @Khoirul-Yardan @RockHead07

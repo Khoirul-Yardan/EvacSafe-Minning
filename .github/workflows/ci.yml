@@ -1,0 +1,52 @@
+# Tahap 1: pemeriksaan tanpa lisensi Unity dan tanpa mengunduh berkas Git LFS
+# (kuota bandwidth LFS pemilik repo tetap aman). CI Unity via GameCI menyusul setelah 30 Sep.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-hygiene:
+    name: Kebersihan repo Unity dan dokumentasi
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Pasangan .meta, versi Unity, berkas lokal, ukuran berkas
+        run: python Tools/CI/check_unity_repo.py
+      - name: Tautan antardokumen
+        run: python Tools/CI/check_doc_links.py
+
+  edge-python:
+    name: Edge Python dan konfigurasi broker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"  # Sama dengan image Tools/Edge/Dockerfile.
+      - name: Sintaks skrip Python
+        run: python -m py_compile Tools/Edge/edge_service.py Tools/telemetry_server.py Tools/CI/*.py
+      - name: Unit test logika keputusan edge
+        run: python -m unittest discover -s Tools/Edge/tests -v
+      - name: Validasi docker compose
+        run: docker compose --profile simulated-edge -f Tools/Mqtt/compose.yaml config --quiet
