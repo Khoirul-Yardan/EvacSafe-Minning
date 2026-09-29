@@ -22,6 +22,13 @@
 /Assets/Scripts/MiningLandslideCutscene.cs*    @RockHead07 @Maaulln
 /Assets/Scripts/MiningLandslideDetector.cs*    @RockHead07 @Maaulln
 /Assets/Resources/Mining/                      @RockHead07 @Maaulln
+/Assets/Scripts/MiningUi*.cs*                  @RockHead07 @Maaulln
+/Assets/Scripts/MiningIcons.cs*                @RockHead07 @Maaulln
+/Assets/Scripts/MiningMenuPanel.cs*            @RockHead07 @Maaulln
+/Assets/Scripts/MiningResultPanel.cs*          @RockHead07 @Maaulln
+/Assets/Scripts/MiningHudView.cs*              @RockHead07 @Maaulln
+/Assets/Resources/Fonts/                       @RockHead07 @Maaulln
+/Tools/UI/                                     @RockHead07 @Maaulln
 
 # Pengaturan global yang dikunci selama pengembangan
 /ProjectSettings/                              @Khoirul-Yardan
