@@ -24,9 +24,12 @@ namespace SafeMining
                 exposure = simulation.Exposure; maxResponseMs = simulation.MaxResponseMs;
                 contacts = simulation.HazardContacts; reroutes = simulation.Reroutes; seed = simulation.ActiveSeed;
                 mode = simulation.Mode; scenario = simulation.ActiveScenario; source = simulation.ActiveHazardSource;
-                dataLoss = simulation.EdgeSession != null && simulation.EdgeSession.DataLoss;
-                hadDisconnect = simulation.EdgeSession != null && simulation.EdgeSession.HadDisconnect;
-                dataStale = simulation.EdgeSession != null && simulation.EdgeSession.DataStale;
+                dataLoss = (simulation.EdgeSession != null && simulation.EdgeSession.DataLoss) ||
+                    (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.DataLoss);
+                hadDisconnect = (simulation.EdgeSession != null && simulation.EdgeSession.HadDisconnect) ||
+                    (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.HadDisconnect);
+                dataStale = (simulation.EdgeSession != null && simulation.EdgeSession.DataStale) ||
+                    (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.Failed);
             }
         }
         public MiningSimulation Simulation;
@@ -42,6 +45,9 @@ namespace SafeMining
         bool showDiagnostics;
         bool wasMenu;
         bool wasModalVisible;
+        bool showLearningPanel;
+        bool learningReview;
+        int selectedLearningAnswer = -1;
         SessionComparison comparison;
         MiningMode selectedMode = MiningMode.Story;
         HazardScenarioMode selectedScenario = HazardScenarioMode.Random;
@@ -53,6 +59,10 @@ namespace SafeMining
         GameObject cameraSettingsRoot;
         GameObject comparisonPanel;
         Text comparisonMeta;
+        RectTransform learningPanel;
+        Text learningTitle, learningBody, learningQuestion, learningFeedback;
+        Button learningContinue, learningSkip;
+        readonly Button[] learningAnswers = new Button[3];
         readonly Text[] comparisonAdaptiveValues = new Text[6];
         readonly Text[] comparisonStaticValues = new Text[6];
         Text storySelectionLabel, fppSelectionLabel;
@@ -73,7 +83,7 @@ namespace SafeMining
             scaler.referenceResolution = new Vector2(1600, 900); scaler.matchWidthOrHeight = .5f;
             if (FindFirstObjectByType<EventSystem>() == null) new GameObject("UI input", typeof(EventSystem), typeof(InputSystemUIInputModule));
             hud = Panel(canvas, "In-session HUD", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, Color.clear);
-            BuildHUD(); BuildMenu(); BuildModal();
+            BuildHUD(); BuildMenu(); BuildModal(); BuildLearningPanel();
             var eventSystem = FindFirstObjectByType<EventSystem>();
             if (eventSystem != null) eventSystem.SetSelectedGameObject(startButton.gameObject);
         }
@@ -186,7 +196,7 @@ namespace SafeMining
 
             scenarioLabel = Label(menu, "Scenario seed", "", new Vector2(-80, -316), new Vector2(800, 28), 16, safetyAmber, TextAnchor.MiddleCenter);
             Button(menu, "Seed acak baru", new Vector2(460, -316), new Vector2(190, 40), () => { Simulation.NewRandomScenario(); RefreshMenuChoices(); });
-            startButton = Button(menu, "Mulai simulasi", new Vector2(0, -370), new Vector2(600, 54), () => Simulation.Begin(selectedMode, adaptive), true);
+            startButton = Button(menu, "Mulai simulasi", new Vector2(0, -370), new Vector2(600, 54), ShowPreLearning, true);
             menuStartLabel = startButton.GetComponentInChildren<Text>();
             Label(menu, "Controls and data note", "FPP: WASD · mouse · Shift · F lampu · G kacamata · Esc jeda     /     Semua data dan sensor bersifat virtual", new Vector2(0, -424), new Vector2(1420, 28), 15, muted, TextAnchor.MiddleCenter);
             RefreshMenuChoices();
@@ -221,7 +231,7 @@ namespace SafeMining
             menuStartLabel.text = selectedMode == MiningMode.Story ? "Mulai Mode Cerita" : "Mulai Mode FPP";
             scenarioLabel.text = "Skenario " + ScenarioName(Simulation.scenarioMode) + "   ·   Seed " + Simulation.scenarioSeed + "   ·   R mengulang seed ini";
             sourceHint.text = Simulation.hazardSource == HazardSource.MqttEdgeSimulation
-                ? "Broker MQTT harus aktif. Jika belum tersedia, pilih Edge Lokal."
+                ? "Aktifkan broker dan layanan Python: klasifikasi bahaya serta perhitungan rute dilakukan di edge."
                 : Simulation.hazardSource == HazardSource.LocalEdgeSimulation
                     ? "Edge Lokal berjalan tanpa broker MQTT. Sensor tetap dimodelkan secara virtual."
                     : "Jadwal pembanding lama; jalur ini tidak memakai sampel sensor virtual.";
@@ -305,8 +315,7 @@ namespace SafeMining
             var card = Card(modal, "Result", new Vector2(.5f, .5f), new Vector2(0, 50), new Vector2(790, 640));
             modalTitle = Label(card, "Title", "", new Vector2(0, 238), new Vector2(710, 64), 36, safeGreen, TextAnchor.MiddleCenter);
             modalBody = Label(card, "Summary", "", new Vector2(0, 82), new Vector2(682, 218), 20, Color.white);
-            modalPrimaryButton = Button(card, "Lanjutkan simulasi", new Vector2(-177, -55), new Vector2(326, 52), () =>
-            { if (Simulation.State == SessionState.Paused) Simulation.TogglePause(); else StartSameSession(Simulation.Adaptive, false); }, true);
+            modalPrimaryButton = Button(card, "Lanjutkan simulasi", new Vector2(-177, -55), new Vector2(326, 52), OnModalPrimary, true);
             modalPrimaryLabel = modalPrimaryButton.GetComponentInChildren<Text>();
             modalSecondaryButton = Button(card, "Kembali ke menu", new Vector2(177, -55), new Vector2(326, 52), ReturnToMenu);
             modalSecondaryLabel = modalSecondaryButton.GetComponentInChildren<Text>();
@@ -320,7 +329,7 @@ namespace SafeMining
             comparisonMeta = Label(comparison, "Comparison setup", "", new Vector2(0, 102), new Vector2(650, 20), 14, muted, TextAnchor.MiddleCenter);
             Label(comparison, "Adaptive column", "ADAPTIF", new Vector2(-5, 72), new Vector2(190, 22), 15, safetyAmber, TextAnchor.MiddleCenter);
             Label(comparison, "Static column", "STATIS", new Vector2(215, 72), new Vector2(180, 22), 15, muted, TextAnchor.MiddleCenter);
-            string[] comparisonRows = { "Waktu evakuasi", "Paparan bahaya", "Kontak bahaya", "Perubahan rute", "Hasil", "Respons maks." };
+            string[] comparisonRows = { "Durasi sesi", "Kedekatan bahaya", "Kontak model", "Perubahan rute", "Hasil", "Komputasi ulang maks." };
             for (int i = 0; i < comparisonRows.Length; i++)
             {
                 float y = 44 - i * 28;
@@ -340,11 +349,154 @@ namespace SafeMining
             cameraSettingsLabel = Label(settings, "Current camera settings", "", new Vector2(0, -42), new Vector2(710, 24), 15, muted, TextAnchor.MiddleCenter);
             cameraSettingsRoot.SetActive(false);
         }
+        void BuildLearningPanel()
+        {
+            learningPanel = Panel(canvas, "Learning briefing and reflection", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
+                new Color(.008f, .015f, .018f, .96f));
+            var card = Card(learningPanel, "Learning step", new Vector2(.5f, .5f), Vector2.zero, new Vector2(930, 700));
+            learningTitle = Label(card, "Learning title", "Sebelum latihan", new Vector2(0, 286), new Vector2(820, 54), 34, Color.white, TextAnchor.MiddleCenter);
+            learningBody = Label(card, "Learning briefing", "", new Vector2(0, 196), new Vector2(800, 112), 19, muted, TextAnchor.MiddleCenter);
+            learningQuestion = Label(card, "Learning question", "", new Vector2(0, 104), new Vector2(800, 54), 21, safetyAmber, TextAnchor.MiddleCenter);
+            for (int i = 0; i < learningAnswers.Length; i++)
+            {
+                int answerIndex = i;
+                learningAnswers[i] = Button(card, "Pilihan " + (i + 1), new Vector2(0, 42 - i * 62), new Vector2(780, 50),
+                    () => SelectLearningAnswer(answerIndex));
+            }
+            learningFeedback = Label(card, "Learning feedback", "", new Vector2(0, -164), new Vector2(800, 76), 17, Color.white, TextAnchor.MiddleCenter);
+            learningContinue = Button(card, "Lanjut", new Vector2(0, -260), new Vector2(500, 54), ContinueLearning, true);
+            learningContinue.interactable = false;
+            learningSkip = Button(card, "Lewati dan mulai simulasi biasa", new Vector2(0, -322), new Vector2(500, 42), OnLearningSkip);
+            learningSkip.gameObject.SetActive(false);
+            learningPanel.gameObject.SetActive(false);
+        }
+        void ShowPreLearning()
+        {
+            learningReview = false;
+            selectedLearningAnswer = -1;
+            learningTitle.text = "Sebelum latihan";
+            learningBody.text = selectedMode == MiningMode.Story
+                ? "Tujuan latihan: kenali status detektor dan amati bagaimana jalur berubah. Dalam Mode Cerita, ikuti peringatan, minimap, dan rute menuju zona aman. Skenario ini memakai jadwal terkontrol dan data virtual."
+                : "Tujuan latihan: kenali status detektor lalu evakuasi dengan aman. WASD bergerak, mouse melihat, Shift berlari. Periksa peringatan, minimap, dan petunjuk ke zona aman. Skenario ini memakai jadwal terkontrol dan data virtual.";
+            learningQuestion.text = "Lampu detektor menyala kuning. Apa artinya dan apa respons aman?";
+            SetLearningChoices(new[] {
+                "Waspada; cek informasi dan rute aman sebelum kondisi memburuk.",
+                "Abaikan bila lorong tampak kosong; lanjutkan seperti biasa.",
+                "Tunggu sampai indikator merah sebelum memeriksa jalur alternatif."
+            });
+            learningFeedback.text = "Pilih jawaban awal. Jawaban akan dibandingkan dengan refleksi setelah latihan.";
+            learningContinue.GetComponentInChildren<Text>().text = "Mulai latihan terpandu";
+            learningContinue.interactable = false;
+            learningSkip.gameObject.SetActive(true);
+            learningSkip.GetComponentInChildren<Text>().text = "Lewati dan mulai simulasi biasa";
+            showLearningPanel = true;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(learningAnswers[0].gameObject);
+        }
+        void ShowPostLearning()
+        {
+            learningReview = true;
+            selectedLearningAnswer = -1;
+            learningTitle.text = "Tinjau keputusanmu";
+            learningBody.text = BuildLearningDebrief();
+            learningQuestion.text = "Lampu detektor menyala kuning. Apa artinya dan apa respons aman?";
+            SetLearningChoices(new[] {
+                "Waspada; cek informasi dan rute aman sebelum kondisi memburuk.",
+                "Abaikan bila lorong tampak kosong; lanjutkan seperti biasa.",
+                "Tunggu sampai indikator merah sebelum memeriksa jalur alternatif."
+            });
+            learningFeedback.text = "Pilih jawaban refleksi untuk melihat pelajaran dari sesi ini.";
+            learningContinue.GetComponentInChildren<Text>().text = "Kembali ke ringkasan sesi";
+            learningContinue.interactable = false;
+            learningSkip.gameObject.SetActive(true);
+            learningSkip.GetComponentInChildren<Text>().text = "Lewati refleksi";
+            showLearningPanel = true;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(learningAnswers[0].gameObject);
+        }
+        void SetLearningChoices(string[] choices)
+        {
+            for (int i = 0; i < learningAnswers.Length; i++)
+            {
+                var button = learningAnswers[i];
+                button.GetComponentInChildren<Text>().text = choices[i];
+                StyleChoice(button, false);
+            }
+        }
+        void SelectLearningAnswer(int answer)
+        {
+            selectedLearningAnswer = answer;
+            for (int i = 0; i < learningAnswers.Length; i++) StyleChoice(learningAnswers[i], i == answer);
+            learningContinue.interactable = true;
+            if (learningReview)
+            {
+                bool correct = answer == 0;
+                Simulation.RecordLearningPostAnswer(correct);
+                string before = Simulation.LearningPreCorrect.HasValue
+                    ? Simulation.LearningPreCorrect.Value ? "Sebelum latihan: jawaban tepat." : "Sebelum latihan: status kuning belum dikenali."
+                    : "";
+                learningFeedback.text = (correct ? "Tepat. " : "Belum tepat. ") +
+                    "Lampu kuning berarti waspada: periksa petunjuk dan rute aman sebelum kondisi memburuk." +
+                    (string.IsNullOrEmpty(before) ? "" : "\n" + before + " Setelah latihan: " + (correct ? "jawaban tepat." : "masih perlu latihan."));
+                learningFeedback.color = correct ? safeGreen : safetyAmber;
+            }
+            else
+            {
+                learningFeedback.text = "Jawaban awal tersimpan. Setelah latihan, kamu akan menjawab pertanyaan refleksi.";
+                learningFeedback.color = Color.white;
+            }
+        }
+        void ContinueLearning()
+        {
+            if (learningReview)
+            {
+                showLearningPanel = false;
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(modalPrimaryButton.gameObject);
+                return;
+            }
+            if (selectedLearningAnswer < 0) return;
+            Simulation.Begin(selectedMode, adaptive, true);
+            Simulation.RecordLearningPreAnswer(selectedLearningAnswer == 0);
+            showLearningPanel = false;
+            comparison = null;
+        }
+        void StartStandardSession()
+        {
+            showLearningPanel = false;
+            Simulation.Begin(selectedMode, adaptive);
+            comparison = null;
+        }
+        void OnLearningSkip()
+        {
+            if (!learningReview)
+            {
+                StartStandardSession();
+                return;
+            }
+            showLearningPanel = false;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(modalSecondaryButton.gameObject);
+        }
+        string BuildLearningDebrief()
+        {
+            var s = Simulation;
+            string outcome = s.State == SessionState.Success
+                ? "Kamu mencapai zona aman."
+                : "Sesi berakhir sebelum zona aman tercapai.";
+            string hazardLesson = s.HazardContacts == 0
+                ? "Kamu tidak memasuki perimeter longsor pada sesi ini."
+                : "Kamu sempat berada dekat area longsor; gunakan peringatan lebih awal untuk menjaga jarak.";
+            return outcome + " " + hazardLesson + "\nPerhatikan urutannya: kuning = waspada, merah = jalur tertutup. Saat waspada, cek rute alternatif dan bergerak menjauhi area berisiko.";
+        }
         Text cameraSettingsLabel;
         void ReturnToMenu()
         {
+            showLearningPanel = false;
             comparison = null;
             Simulation.Menu();
+        }
+        void OnModalPrimary()
+        {
+            if (Simulation.State == SessionState.Paused) Simulation.TogglePause();
+            else if (Simulation.LearningSession) ShowPostLearning();
+            else StartSameSession(Simulation.Adaptive, false);
         }
         void RunComparison()
         {
@@ -374,6 +526,11 @@ namespace SafeMining
                 return "DATA VIRTUAL · EDGE LOKAL";
             }
             var session = simulation.EdgeSession;
+            if (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.Failed)
+            {
+                sourceBadge.color = new Color(.91f, .51f, .34f);
+                return "MQTT · NAVIGASI EDGE TIDAK TERSEDIA — ulangi sesi";
+            }
             if (session == null)
             {
                 if (simulation.LastDetectorAlert.Contains("Konfigurasi edge gagal"))
@@ -392,7 +549,8 @@ namespace SafeMining
                     : "MQTT · DATA BELUM MUTAKHIR — jeda, lalu pilih Edge Lokal";
             }
             sourceBadge.color = safeGreen;
-            return "DATA VIRTUAL · " + session.TransportStatus.ToUpperInvariant();
+            return simulation.NavigationWaiting ? "DATA VIRTUAL · MENUNGGU RUTE EDGE" :
+                "DATA VIRTUAL · " + session.TransportStatus.ToUpperInvariant();
         }
         string BuildPriorityAlert(MiningSimulation simulation, float nearestHazardDistance)
         {
@@ -458,14 +616,13 @@ namespace SafeMining
             SessionState adaptiveOutcome = comparisonWasAdaptive ? comparison.outcome : simulation.State;
             SessionState staticOutcome = comparisonWasAdaptive ? simulation.State : comparison.outcome;
             float adaptiveResponse = comparisonWasAdaptive ? comparison.maxResponseMs : simulation.MaxResponseMs;
-            float staticResponse = comparisonWasAdaptive ? simulation.MaxResponseMs : comparison.maxResponseMs;
             string[] adaptiveValues = {
-                adaptiveTime.ToString("F1") + " s", adaptiveExposure.ToString("F1") + " s", adaptiveContacts.ToString(),
+                adaptiveTime.ToString("F1") + (adaptiveOutcome == SessionState.Success ? " s · selesai" : " s · terblokir"), adaptiveExposure.ToString("F1") + " s", adaptiveContacts.ToString(),
                 adaptiveReroutes.ToString(), OutcomeName(adaptiveOutcome), adaptiveResponse.ToString("F3") + " ms"
             };
             string[] staticValues = {
-                staticTime.ToString("F1") + " s", staticExposure.ToString("F1") + " s", staticContacts.ToString(),
-                staticReroutes.ToString(), OutcomeName(staticOutcome), staticResponse.ToString("F3") + " ms"
+                staticTime.ToString("F1") + (staticOutcome == SessionState.Success ? " s · selesai" : " s · terblokir"), staticExposure.ToString("F1") + " s", staticContacts.ToString(),
+                staticReroutes.ToString(), OutcomeName(staticOutcome), "— (tanpa hitung ulang)"
             };
             for (int i = 0; i < adaptiveValues.Length; i++)
             {
@@ -473,9 +630,12 @@ namespace SafeMining
                 comparisonStaticValues[i].text = staticValues[i];
             }
             string firstQuality = DataQualityNote(comparison.dataLoss, comparison.dataStale, comparison.hadDisconnect);
-            string secondQuality = DataQualityNote(simulation.EdgeSession != null && simulation.EdgeSession.DataLoss,
-                simulation.EdgeSession != null && simulation.EdgeSession.DataStale,
-                simulation.EdgeSession != null && simulation.EdgeSession.HadDisconnect);
+            string secondQuality = DataQualityNote((simulation.EdgeSession != null && simulation.EdgeSession.DataLoss) ||
+                (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.DataLoss),
+                (simulation.EdgeSession != null && simulation.EdgeSession.DataStale) ||
+                (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.Failed),
+                (simulation.EdgeSession != null && simulation.EdgeSession.HadDisconnect) ||
+                (simulation.EdgeRouteSession != null && simulation.EdgeRouteSession.HadDisconnect));
             comparisonMeta.text = "Seed " + simulation.ActiveSeed + " · " + ScenarioName(simulation.ActiveScenario) + " · " +
                 (simulation.Mode == MiningMode.Story ? "Cerita" : "FPP") + " · " + SourceName(simulation.ActiveHazardSource);
             if (!string.IsNullOrEmpty(firstQuality) || !string.IsNullOrEmpty(secondQuality))
@@ -492,17 +652,21 @@ namespace SafeMining
             var s = Simulation;
             ObserveEdgeSession(s.EdgeSession);
             bool isMenu = s.State == SessionState.Menu;
-            menu.gameObject.SetActive(isMenu);
-            hud.gameObject.SetActive(s.State != SessionState.Menu);
+            menu.gameObject.SetActive(isMenu && !showLearningPanel);
+            hud.gameObject.SetActive(s.State != SessionState.Menu && !showLearningPanel);
             bool showResult = s.State == SessionState.Paused || s.State == SessionState.Success || s.State == SessionState.Blocked;
-            modal.gameObject.SetActive(showResult);
+            modal.gameObject.SetActive(showResult && !showLearningPanel);
+            learningPanel.gameObject.SetActive(showLearningPanel);
             if (isMenu && !wasMenu)
             {
                 if (s.SessionRevision > 0)
                 {
                     selectedMode = s.Mode; adaptive = s.Adaptive;
-                    selectedScenario = s.ActiveScenario; selectedHazardSource = s.ActiveHazardSource;
-                    s.scenarioMode = selectedScenario; s.hazardSource = selectedHazardSource;
+                    if (!s.LearningSession)
+                    {
+                        selectedScenario = s.ActiveScenario; selectedHazardSource = s.ActiveHazardSource;
+                        s.scenarioMode = selectedScenario; s.hazardSource = selectedHazardSource;
+                    }
                 }
                 else
                 {
@@ -511,7 +675,7 @@ namespace SafeMining
                 showDiagnostics = false;
                 RefreshMenuChoices();
                 var eventSystem = EventSystem.current;
-                if (eventSystem != null) eventSystem.SetSelectedGameObject(startButton.gameObject);
+                if (eventSystem != null && !showLearningPanel) eventSystem.SetSelectedGameObject(startButton.gameObject);
             }
             if (showResult && !wasModalVisible)
             {
@@ -541,7 +705,10 @@ namespace SafeMining
             ApplyHudPresentation(s);
             mode.text = (s.Mode == MiningMode.Story ? "MODE CERITA" : "MODE FPP") + "  ·  " + (s.Adaptive ? "NAVIGASI ADAPTIF" : "NAVIGASI STATIS");
             sourceBadge.text = BuildSourceStatus(s);
-            controlHints.text = s.Mode == MiningMode.Story ? "Esc  Jeda / lanjut     R  Ulangi skenario yang sama" : "WASD  Bergerak     Mouse  Lihat     Shift  Lari     F  Lampu helm     G  Kacamata     Esc  Jeda     R  Ulang";
+            controlHints.text = s.Mode == MiningMode.Story
+                ? s.LearningSession ? "Esc  Jeda / lanjut     Gunakan ringkasan sesi untuk refleksi belajar" : "Esc  Jeda / lanjut     R  Ulangi skenario yang sama"
+                : "WASD  Bergerak     Mouse  Lihat     Shift  Lari     F  Lampu helm     G  Kacamata     Esc  Jeda" +
+                    (s.LearningSession ? "" : "     R  Ulang");
             equipmentStatus.text = s.Mode == MiningMode.FirstPerson ? "LAMPU HELM " + (s.HeadlampEnabled ? "ON" : "OFF") + "   /   NAVIGASI AR " + (s.GlassesEnabled ? "ON" : "OFF") : "";
             detectorStatus.text = "JARINGAN DETEKTOR  /  " + s.Detectors.Length + " titik\n" + s.LastDetectorAlert;
             edgeFlow.text = BuildEdgeFlow(s);
@@ -549,9 +716,10 @@ namespace SafeMining
             dialogue.text = s.Dialogue;
             bool hasGlasses = s.Mode == MiningMode.Story || s.GlassesEnabled;
             direction.text = hasGlasses ? s.DirectionHint() : "KACAMATA NONAKTIF";
-            distance.text = hasGlasses && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + "  /  " + s.RouteDistance.ToString("F0") + " m sepanjang rute" : "Menunggu rute menuju zona aman";
+            distance.text = !s.NavigationWaiting && hasGlasses && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + "  /  " + s.RouteDistance.ToString("F0") + " m sepanjang rute" : "Menunggu rute menuju zona aman";
             timer.text = s.Elapsed.ToString("F1") + " s";
-            metrics.text = (s.Adaptive ? "ADAPTIF" : "STATIS / BASELINE") + "  |  " + s.Reroutes + " perubahan\nRespons hitung " + s.ResponseMs.ToString("F2") + " ms";
+            metrics.text = (s.Adaptive ? "ADAPTIF" : "STATIS / BASELINE") + "  |  " + s.Reroutes + " perubahan\n" +
+                (s.UsesEdgePlanner ? "Komputasi edge " : "Komputasi lokal ") + s.ResponseMs.ToString("F3") + " ms";
             float danger = s.NearestHazardDistance();
             hazard.text = BuildPriorityAlert(s, danger);
             dangerWash.color = new Color(1, .08f, .01f, Mathf.Clamp01((8 - danger) / 8) * .18f);
@@ -566,11 +734,11 @@ namespace SafeMining
                 bool showComparison = terminal && HasMatchingComparison(s);
                 modalTitle.text = showComparison ? "PERBANDINGAN HASIL" : paused ? "SIMULASI DIJEDA" : success ? "EVAKUASI BERHASIL" : "EVAKUASI TERHALANG";
                 modalTitle.color = showComparison ? safetyAmber : paused ? safetyAmber : success ? safeGreen : new Color(.91f, .51f, .34f);
-                modalPrimaryLabel.text = paused ? "Lanjutkan simulasi" : "Ulangi skenario · seed sama";
+                modalPrimaryLabel.text = paused ? "Lanjutkan simulasi" : s.LearningSession ? "Buka refleksi belajar" : "Ulangi skenario · seed sama";
                 modalSecondaryLabel.text = paused ? "Akhiri & kembali ke menu" : "Kembali ke menu";
                 modalExportLabel.text = paused ? "Ekspor sesi sementara" : "Ekspor hasil evaluasi";
                 modalCompareLabel.text = s.Adaptive ? "Jalankan baseline statis · seed sama" : "Jalankan navigasi adaptif · seed sama";
-                modalCompareButton.gameObject.SetActive(terminal);
+                modalCompareButton.gameObject.SetActive(terminal && !s.LearningSession);
                 modalExportButton.gameObject.SetActive(true);
                 modalExportButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, paused ? -145 : -177);
                 exportStatus.rectTransform.anchoredPosition = new Vector2(0, paused ? -202 : -235);
@@ -582,15 +750,20 @@ namespace SafeMining
                 string dataQuality = s.EdgeSession == null ? "" : s.EdgeSession.DataLoss ? "\n\nDATA TIDAK LENGKAP · periksa status edge sebelum membandingkan." :
                     s.EdgeSession.HadDisconnect ? "\n\nKoneksi MQTT sempat terputus · periksa log edge hasil ekspor." :
                     s.EdgeSession.DataStale ? "\n\nData edge belum mutakhir · hasil perlu ditinjau." : "";
+                if (s.EdgeRouteSession != null && s.EdgeRouteSession.Failed)
+                    dataQuality += "\nNavigasi edge gagal · sesi ini bukan bukti kegagalan algoritme rute.";
                 modalBody.text = (paused ? scenarioInfo + "\n\nSesi dijeda. Ekspor sekarang akan berstatus sementara.\n\n" : scenarioInfo + "\n\n") +
                     "Waktu simulasi       " + s.Elapsed.ToString("F1") + " detik" +
                     "\nJarak tempuh          " + s.Travelled.ToString("F1") + " m" +
                     "\nPaparan bahaya       " + s.Exposure.ToString("F1") + " detik / " + s.HazardContacts + " kontak" +
                     "\nPerubahan rute        " + s.Reroutes + " kali" +
-                    "\nRespons hitung maks.  " + s.MaxResponseMs.ToString("F3") + " ms" + dataQuality;
+                    "\nKomputasi ulang maks.  " + (s.Adaptive ? s.MaxResponseMs.ToString("F3") + " ms" : "—") +
+                    (s.EdgeRouteSession != null ? "\nPermintaan → rute maks. " + s.EdgeRouteSession.MaxRoundTripMs.ToString("F3") + " ms" : "") + dataQuality;
                 exportStatus.text = string.IsNullOrEmpty(s.ExportStatus)
-                    ? paused ? "Ekspor sesi jeda bersifat sementara. Respons = komputasi lokal, bukan latensi jaringan."
-                        : "Ekspor sesi ini sebelum pembanding untuk menyimpan data. Respons = komputasi lokal, bukan latensi jaringan."
+                    ? s.LearningSession && !s.LearningPostCorrect.HasValue ? "Selesaikan refleksi belajar, lalu ekspor untuk menyimpan hasil belajar."
+                    : s.LearningSession ? "Ekspor sesi ini untuk menyimpan jawaban refleksi belajar."
+                    : paused ? "Ekspor sesi jeda bersifat sementara. Komputasi dan waktu permintaan rute dicatat terpisah."
+                        : "Ekspor sebelum pembanding. Waktu komputasi dan permintaan rute berbeda dari latensi sensor fisik."
                     : s.ExportStatus;
                 if (showComparison) UpdateComparison(s);
             }
@@ -650,9 +823,10 @@ namespace SafeMining
             string applied = latestAppliedHazard == null
                 ? "menunggu status dari edge"
                 : latestAppliedHazard.deviceId + " " + LevelName(latestAppliedHazard.level) + " diterapkan";
-            string route = simulation.TargetExit >= 0 ? "EXIT " + (simulation.TargetExit + 1) : "mencari exit";
+            string route = simulation.NavigationWaiting ? "MENUNGGU EDGE" : simulation.TargetExit >= 0 ? "EXIT " + (simulation.TargetExit + 1) : "mencari exit";
             edgeFlow.color = edgeLevel == 2 ? new Color(1f, .48f, .40f) : edgeLevel == 1 ? new Color(1f, .78f, .38f) : edgeLevel < 0 ? muted : Color.white;
-            return reading + "\nEDGE " + level + "  >  " + transport + "  >  " + applied + "  >  RUTE " + route;
+            return reading + "\nEDGE " + level + "  >  " + transport + "  >  " + applied +
+                (simulation.UsesEdgePlanner ? "  >  PLANNER EDGE " : "  >  PLANNER LOKAL ") + route;
         }
 
         static string LevelName(int level)

@@ -1,5 +1,72 @@
 # Getaran, edge virtual, dan MQTT — implementasi Orang 1
 
+## Pembaruan planner edge 29 September 2026
+
+Pada `MqttEdgeSimulation`, klasifikasi bahaya **dan pencarian rute** kini ditempatkan
+di proses Python terpisah. Unity mengirim snapshot graf, lokasi detektor, posisi
+agen, exit, sel tertutup, sel waspada, serta penalti melalui
+`safe-mining/v1/{sessionId}/navigation/request`. Python (`Tools/Edge/edge_routing.py`)
+menjalankan Dijkstra dengan biaya langkah 6 dan penalti peringatan, lalu mengirim
+jalur lewat `safe-mining/v1/{sessionId}/navigation/response` (QoS 1, tanpa retain).
+Request dan response memakai `sequence`, `stateRevision`, `sessionId`, dan
+`layoutId`. Python memeriksa hash graf/detektor; Unity memeriksa korelasi,
+kontiguitas jalur, exit, biaya, sel tertutup, serta posisi dan revisi bahaya terkini.
+Pemeriksaan Unity ini tidak menjalankan ulang pencarian jalur terpendek.
+
+Rute awal adaptif maupun statis dihitung di edge. Adaptif meminta rute baru saat
+status bahaya berubah atau agen FPP berpindah sel; statis mempertahankan rute
+awal setelah diterapkan. Gerak dan petunjuk ditahan saat menunggu rute terbaru.
+Timeout navigasi lima detik waktu nyata di luar jeda dihentikan sebagai
+`navigation_timeout`, bukan `no_safe_route`. Tidak ada fallback otomatis ke
+planner Unity. `LocalEdgeSimulation` (termasuk latihan terpandu) dan
+`LegacyTimeline` tetap menggunakan planner lokal dan **bukan bukti planner edge**.
+
+Bangun ulang layanan agar modul baru masuk container:
+
+```sh
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d --build
+```
+
+Pilih **MQTT edge** pada menu, lalu jalankan Cerita/FPP. Ekspor sebelum mengganti
+sesi. Ekspor menambahkan `_navigation.jsonl`, metadata lokasi planner, alasan
+terminasi, jumlah hasil diterapkan, serta flag kegagalan, jeda, dan disconnect.
+Jejak navigasi juga ditautkan ke `_edge.jsonl` menggunakan id request dan revisi.
+
+Arti pengukuran baru:
+
+| Kolom/ukuran | Batas pengukuran |
+|---|---|
+| `max_planning_ms` | Maksimum waktu pencarian Python pada respons perubahan bahaya yang diterapkan; untuk sumber lokal tetap durasi fungsi Plan Unity |
+| `max_request_to_route_ms` | Waktu nyata dari enqueue request terbaru sampai hasil diterapkan di Unity; mencakup broker, edge, antrean main thread, dan jeda jika ada |
+| `max_hazard_to_route_ms` | Waktu nyata dari perubahan status di Unity sampai penerapan rute; jika perubahan bertumpuk, dimulai dari perubahan pertama yang belum terlayani |
+| `terminal_reason` | Membedakan mencapai exit, jalur tidak tersedia, jalur statis terhalang, longsor di posisi agen, dan kegagalan navigasi/konfigurasi |
+
+Ketiga waktu tersebut **bukan latensi sensor fisik sampai tampilan**. Pencarian
+Python memakai `perf_counter_ns`; durasi aplikasi memakai Stopwatch di Unity,
+tanpa mengurangkan timestamp dari dua proses. Sesi yang dijeda/terputus perlu
+dipisahkan dari benchmark normal. `max_planning_ms = 0` pada statis tidak berarti
+komputasi rute awal nol: kolom itu khusus komputasi ulang akibat bahaya; respons
+rute awal beserta durasinya tersedia di `_navigation.jsonl`.
+
+**Status bukti:** perubahan planner ini belum mempunyai batch evaluasi baru.
+Data 30 pasangan seed 101–130 terdahulu berasal dari `LegacyTimeline` dan planner
+C# sebelum perubahan; angka 29/30 dan 0,0585 ms tidak boleh dilabel ulang sebagai
+hasil Python/MQTT. Bagian validasi dan trace historis di bawah mendokumentasikan
+versi klasifikasi edge sebelumnya, bukan verifikasi planner Python baru.
+
+### Penyelarasan naskah
+
+Metode untuk versi MQTT baru dapat menyatakan: “Sampel virtual diproses oleh
+layanan Python untuk klasifikasi status bahaya. Unity meneruskan snapshot graf,
+status bahaya, dan posisi agen ke layanan tersebut untuk perhitungan rute.
+Hasil perencanaan dikirim melalui MQTT dan diterapkan setelah pemeriksaan
+identitas sesi, revisi kondisi, serta kelayakan lintasan.” Klaim ini menjelaskan
+implementasi kode; efektivitas dan angka kinerja tetap memerlukan data baru.
+
+`[PLACEHOLDER GAMBAR: screenshot Unity dengan sumber MQTT edge, seed, waktu,
+status detektor, dan rute dari Python. PLACEHOLDER HASIL: evaluasi berpasangan
+melalui sumber MQTT, dipisahkan dari batch LegacyTimeline terdahulu.]`
+
 25 September 2026. Scene: `Assets/Scenes/SafeMining_Experience.unity`.
 
 Alur aktif adalah **getaran lingkungan → pembacaan sensor virtual → keputusan edge → broker MQTT → subscriber Unity → status lorong → navigasi**. Tidak ada trigger spawn point, jarak pemain, atau collider pemain untuk menyalakan sensor. Titik awal pekerja dan lokasi pemasangan detektor tetap diperlukan sebagai geometri. Jadwal skenario menentukan profil **input getaran**, bukan langsung menutup lorong pada mode edge.

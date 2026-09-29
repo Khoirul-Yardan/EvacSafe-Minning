@@ -196,6 +196,7 @@ namespace SafeMining
         // Called synchronously by the simulation's application callback after status + route update.
         public void TraceRoute(int exit, float planningMs)
         { pendingRoute = "exit=" + exit + ";planningMs=" + planningMs.ToString("F4", CultureInfo.InvariantCulture); }
+        public void TraceNavigation(string stage, string detail) => Record("navigation_" + stage, null, detail);
         void Record(string stage, EdgeStatusMessage message, string detail, double monotonicMs = -1)
         {
             if (trace.Count >= MaxTraceEntries) { DataLoss = true; return; }

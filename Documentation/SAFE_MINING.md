@@ -11,7 +11,7 @@ Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan **Play**, pilih jenis na
 | Kontrol | Fungsi |
 |---|---|
 | Esc | Jeda / lanjut |
-| R | Mengulang mode aktif dengan jenis navigasi dan seed yang sama |
+| R | Mengulang sesi biasa dengan jenis navigasi dan seed yang sama; sesi belajar diulang dari menu agar pemeriksaan awal dimulai lagi |
 | WASD / mouse | Bergerak / melihat dalam FPP |
 | Shift / F / G | Lari / lampu helm / kacamata AR dalam FPP |
 | Acak skenario baru (menu) | Memilih seed baru untuk sesi selanjutnya |
@@ -20,6 +20,12 @@ Buka `Assets/Scenes/SafeMining_Experience.unity`, tekan **Play**, pilih jenis na
 | Ekspor hasil evaluasi (.csv) | Menyimpan data sesi saat ini |
 
 Dalam Cerita, pekerja berjalan otomatis dan kamera mengikuti dari belakang. Dalam FPP, pemain bergerak sendiri pada ketinggian mata pekerja. Detektor, longsor, collision, navigasi, minimap, dan hasil evakuasi berlaku untuk keduanya. Gunakan menu jeda untuk mengatur sensitivitas, FOV, dan ayunan kamera. Kembali ke menu untuk memilih mode lain; setiap peluncuran memulai sesi baru.
+
+### Latihan belajar
+
+Tombol mulai membuka pertanyaan singkat tentang arti indikator kuning. Setelah jawaban awal disimpan, briefing menjelaskan tujuan latihan, lalu simulasi berjalan dengan skenario **Terkontrol** dan sumber **Edge Lokal** agar urutan latihannya konsisten tanpa broker MQTT. Pilihan Mode Cerita/FPP dan navigasi tetap mengikuti menu. Pilih **Lewati dan mulai simulasi biasa** untuk memakai skenario serta sumber yang dipilih di menu.
+
+Setelah sesi terpandu berhasil atau terhalang, pilih **Buka refleksi belajar**. Ringkasan menjelaskan outcome dan paparan bahaya, lalu pertanyaan yang sama ditampilkan lagi untuk membandingkan pemahaman sebelum dan sesudah latihan. Selesaikan refleksi sebelum ekspor agar kolom `learning_pre_correct` dan `learning_post_correct` pada `_summary.csv` terisi. Nilai kosong berarti sesi bukan latihan belajar atau refleksi belum dijawab.
 
 ## Mengubah tunnel tanpa mengedit kode
 
@@ -102,6 +108,8 @@ Ekspor tersimpan pada `Application.persistentDataPath/Evaluasi` dan lokasi lengk
 `elapsed_s` mencakup briefing tetapi tidak bertambah ketika jeda. Nilainya memakai delta waktu simulasi yang dibatasi 0,05 detik/frame, sehingga tidak selalu sama dengan waktu dinding pada frame rate rendah. `distance_m` adalah akumulasi perpindahan horizontal aktor.
 
 `exposure_s` menghitung durasi dalam radius 4,5 m dari pusat longsor berstatus tertutup. `hazard_contacts` menghitung masuknya aktor ke perimeter tersebut dan kejadian longsor tepat di sel aktor; ini bukan hitungan benturan fisika atau prediksi cedera. `reroutes` bertambah ketika pembaruan bahaya mengubah sisa urutan rute atau target exit; bagian rute yang sudah dilalui diabaikan. Ini bukan jumlah seluruh panggilan planner.
+
+Untuk sesi belajar, `_summary.csv` juga menyimpan `learning_session`, `learning_pre_correct`, dan `learning_post_correct`. Satu pertanyaan yang sama dipakai sebelum dan sesudah sesi sebagai pemeriksaan pemahaman awal; ini indikator belajar sederhana, bukan evaluasi efektivitas pendidikan yang tervalidasi.
 
 `max_planning_ms` merupakan waktu maksimum komputasi lokal pada pembaruan bahaya, termasuk peringatan. Pengukuran mencakup pencarian dan penyesuaian rute dengan Stopwatch, bukan latensi sensor, WebSocket, rendering, atau perangkat edge fisik. Ekspor saat Paused/Running/Menu bukan hasil akhir; gunakan hanya `Success`/`Blocked` untuk membandingkan hasil akhir.
 

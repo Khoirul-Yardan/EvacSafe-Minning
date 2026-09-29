@@ -54,12 +54,13 @@ namespace SafeMining
         public bool TryReceive(out Delivery delivery) => incoming.TryDequeue(out delivery);
         public bool TryNotice(out Notice notice) => notices.TryDequeue(out notice);
 
-        public MiningMqttClient(MiningMqttSettings settings, string session, Stopwatch clock = null)
+        public MiningMqttClient(MiningMqttSettings settings, string session, Stopwatch clock = null, bool navigation = false)
         {
             if (string.IsNullOrWhiteSpace(settings.host) || settings.port < 1 || settings.port > 65535)
                 throw new ArgumentException("Broker MQTT tidak valid.");
             this.clock = clock ?? Stopwatch.StartNew();
-            this.settings = settings.Copy(); subscription = "safe-mining/v1/" + session + "/edge/+/status";
+            this.settings = settings.Copy(); subscription = "safe-mining/v1/" + session +
+                (navigation ? "/navigation/response" : "/edge/+/status");
             clientId = "sm" + Guid.NewGuid().ToString("N").Substring(0, 20);
             worker = new Thread(Run) { IsBackground = true, Name = "SafeMining MQTT" }; worker.Start();
         }

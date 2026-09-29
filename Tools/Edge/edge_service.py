@@ -7,6 +7,7 @@ import threading
 import time
 
 import paho.mqtt.client as mqtt
+from edge_routing import handle_route
 
 
 BROKER = os.getenv("MQTT_HOST", "broker")
@@ -24,12 +25,16 @@ def finite_range(value, low, high):
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         client.subscribe(ROOT + "+/sensor/+/sample", qos=1)
-        print("Connected; subscribed to sensor samples", flush=True)
+        client.subscribe(ROOT + "+/navigation/request", qos=1)
+        print("Connected; subscribed to sensor samples and route requests", flush=True)
     else:
         print(f"Broker rejected connection: {reason_code}", flush=True)
 
 
 def on_message(client, userdata, packet):
+    if packet.topic.endswith("/navigation/request"):
+        handle_route(client, packet)
+        return
     try:
         sample = json.loads(packet.payload.decode("utf-8"))
         if not isinstance(sample, dict) or set(sample) != {
