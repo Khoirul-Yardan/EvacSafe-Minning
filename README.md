@@ -4,17 +4,29 @@ Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP m
 
 [Deskripsi lengkap simulasi dan perbedaan sebelum/sesudah MQTT](Documentation/Deskripsi%20lengkap.md).
 
-Alur bawaan: **getaran lingkungan → edge virtual → broker MQTT → Unity → bahaya dan navigasi**. Sensor tidak dipicu spawn point atau kedekatan pemain. HUD menampilkan alur deteksi dan panel kamera longsor kecil di atas dialog pada FPP maupun Cerita. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
+Alur bawaan: **sensor getaran virtual di Unity → broker MQTT → edge Python (container terpisah) → broker MQTT → Unity → bahaya dan navigasi**. Sensor dan getaran tetap simulasi; planner rute tetap C# di Unity. Sensor tidak dipicu spawn point atau kedekatan pemain. HUD menampilkan alur deteksi dan panel kamera longsor kecil di atas dialog pada FPP maupun Cerita. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
 
 Panel cutscene muncul saat lorong benar-benar tertutup, menampilkan lokasi perangkat selama lima detik, dan mengantre beberapa lokasi secara bergantian. Kamera utama dan kontrol tetap berjalan. [Integrasi feat/irawan, audit dokumentasi, dan panduan cutscene](Documentation/UPDATE_IRAWAN_CUTSCENE_2026-09-27.md).
 
-Jalankan broker lokal sebelum memulai mode MQTT (Docker Desktop harus aktif):
+Sebelum memulai mode MQTT, jalankan broker Mosquitto **dan** edge Python dari root proyek (Docker Desktop harus aktif):
 
 ```powershell
-docker compose -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d --build
 ```
 
-Tanpa broker, pilih `LocalEdgeSimulation` pada `MiningSimulation > Hazard Source` sebelum memulai. Mode MQTT tidak berpindah otomatis ke lokal ketika terputus. `LegacyTimeline` tersedia untuk pembanding jadwal lama.
+Pastikan dua layanan berjalan, `broker` dan `python-edge`:
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml ps
+```
+
+Tanpa `--profile simulated-edge` hanya broker yang menyala. Unity tetap mengirim sampel getaran, tetapi tidak ada edge yang mengirim status balik, sehingga peringatan dan longsor **tidak pernah diterapkan**. Build pertama mengunduh image Python dan `paho-mqtt`, jadi jalankan sekali saat ada internet sebelum demo. Hentikan setelah selesai:
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml down
+```
+
+Tanpa Docker, pilih sumber **Edge lokal** di menu simulasi sebelum mulai (setara `LocalEdgeSimulation` pada `MiningSimulation > Hazard Source`). Mode MQTT tidak berpindah otomatis ke lokal ketika terputus. **Jadwal pembanding** (`LegacyTimeline`) tersedia untuk membandingkan dengan jadwal lama.
 
 1. Buka `Assets/Scenes/SafeMining_Experience.unity` di Unity 6000.3.23f1.
 2. Tekan **Play**, pilih navigasi dan skenario, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**.
