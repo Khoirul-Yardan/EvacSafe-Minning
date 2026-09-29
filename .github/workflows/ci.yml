@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: "3.12"  # Matches the Tools/Edge/Dockerfile image.
       - name: Check Python syntax
-        run: python -m py_compile Tools/Edge/edge_service.py Tools/telemetry_server.py Tools/CI/*.py
+        run: python -m py_compile Tools/Edge/*.py Tools/telemetry_server.py Tools/CI/*.py Tools/UI/*.py
       - name: Run edge decision unit tests
         run: python -m unittest discover -s Tools/Edge/tests -v
       - name: Validate docker compose

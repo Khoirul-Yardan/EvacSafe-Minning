@@ -4,20 +4,32 @@ Simulasi evakuasi tambang Unity dengan **Mode Cerita otomatis** dan **Mode FPP m
 
 [Deskripsi lengkap simulasi dan perbedaan sebelum/sesudah MQTT](Documentation/Deskripsi%20lengkap.md).
 
-Alur bawaan: **getaran lingkungan → edge virtual → broker MQTT → Unity → bahaya dan navigasi**. Sensor tidak dipicu spawn point atau kedekatan pemain. HUD menampilkan alur deteksi dan panel kamera longsor kecil di atas dialog pada FPP maupun Cerita. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
+Alur MQTT: **sensor getaran virtual di Unity → broker MQTT → klasifikasi bahaya Python → Unity → permintaan rute MQTT → planner Python → penerapan rute Unity**. Sensor dan posisi tetap virtual; pada sumber MQTT, pencarian rute dijalankan di proses Python terpisah. Edge lokal dan jadwal pembanding memakai planner C# Unity. Sensor tidak dipicu spawn point atau kedekatan pemain. HUD menampilkan alur deteksi dan panel kamera longsor kecil di atas dialog pada FPP maupun Cerita. [Panduan getaran, edge, MQTT, dan pengujian](Documentation/EDGE_MQTT.md).
 
 Panel cutscene muncul saat lorong benar-benar tertutup, menampilkan lokasi perangkat selama lima detik, dan mengantre beberapa lokasi secara bergantian. Kamera utama dan kontrol tetap berjalan. [Integrasi feat/irawan, audit dokumentasi, dan panduan cutscene](Documentation/UPDATE_IRAWAN_CUTSCENE_2026-09-27.md).
 
-Jalankan broker lokal sebelum memulai mode MQTT (Docker Desktop harus aktif):
+Sebelum memulai mode MQTT, jalankan broker Mosquitto **dan** edge Python dari root proyek (Docker Desktop harus aktif):
 
 ```powershell
-docker compose -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d --build
 ```
 
-Tanpa broker, pilih `LocalEdgeSimulation` pada `MiningSimulation > Hazard Source` sebelum memulai. Mode MQTT tidak berpindah otomatis ke lokal ketika terputus. `LegacyTimeline` tersedia untuk pembanding jadwal lama.
+Pastikan dua layanan berjalan, `broker` dan `python-edge`:
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml ps
+```
+
+Tanpa `--profile simulated-edge` hanya broker yang menyala. Tidak ada layanan Python untuk mengirim status maupun rute; navigasi MQTT akan berhenti dengan alasan timeout. Build pertama mengunduh image Python dan `paho-mqtt`, jadi jalankan sekali saat ada internet sebelum demo. Hentikan setelah selesai:
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml down
+```
+
+Tanpa Docker, pilih sumber **Edge lokal** di menu simulasi sebelum mulai (setara `LocalEdgeSimulation` pada `MiningSimulation > Hazard Source`). Mode MQTT tidak berpindah otomatis ke lokal ketika terputus. **Jadwal pembanding** (`LegacyTimeline`) tersedia untuk membandingkan dengan jadwal lama.
 
 1. Buka `Assets/Scenes/SafeMining_Experience.unity` di Unity 6000.3.23f1.
-2. Tekan **Play**, pilih navigasi dan skenario, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**.
+2. Tekan **Play**, pilih navigasi dan skenario, lalu **Mulai Mode Cerita** atau **Mulai Mode FPP**. Panel awal menyediakan latihan terpandu (skenario terkontrol, edge lokal) atau **Lewati dan mulai simulasi biasa** untuk memakai sumber yang dipilih. Pilih simulasi biasa untuk mengevaluasi planner MQTT.
 3. FPP: **WASD** bergerak, **mouse** melihat, **Shift** berlari, **F** lampu helm, **G** kacamata navigasi. Cerita: pekerja bergerak otomatis.
 4. **Esc** untuk jeda/lanjut dan mengatur sensitivitas mouse, FOV, serta ayunan kamera. **R** mengulang mode dan seed yang sama. Pilih **Acak skenario baru** di menu untuk kejadian lain.
 
@@ -29,6 +41,8 @@ Tunnel dibangun secara **prosedural deterministik**. Denah kini dapat diubah mel
 - [Panduan pengaturan tunnel, simulasi cerita, dan evaluasi](Documentation/SAFE_MINING.md)
 - [Update terbaru: audit procedural/dinamis dan cara menjawab research problem](Documentation/UPDATE_RESEARCH_2026-09-23.md)
 - [Alur kerja tim, CI, dan aturan branch](Documentation/DEVELOPMENT_WORKFLOW.md)
+- [Desain ulang UI: warna, huruf, ikon, menu, HUD, dan panel hasil](Documentation/UI_REDESIGN_2026-09-29.md)
+- [Pendekatan pengembangan dan keputusan tim](Documentation/PENDEKATAN_PENGEMBANGAN_2026-09-29.md)
 
 Untuk melihat denah tanpa Play, pilih **EDITOR PREVIEW** di Hierarchy. Setelah mengubah koridor, jalankan **SafeMining > Documentation > Rebuild Editor Preview** dan simpan scene. Gunakan kamera seluruh map atau kamera cerita untuk dokumentasi.
 
