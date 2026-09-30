@@ -1,0 +1,7 @@
+PASS simultaneous closures: no early reroute; wait for both shots; map avoids closures; resume after ready.
+PASS warning clears without collapse; repeated incident holds again; reset clears story state.
+PASS static route stays fixed and stops; FPP unaffected.
+PASS raw vibration stops before decision; outdated normal snapshot cannot release hold.
+PASS stale edge data holds worker; a new tremor interrupts route readiness.
+PASS live LocalEdgeSimulation: walks first, stops on sample, edge/collapse clocks continue, pause freezes, remains still during inspection and mapping, resumes along safe route.
+PASS All story checks passed.

@@ -30,6 +30,7 @@ namespace SafeMining
 
     public static class MiningRouteContract
     {
+        public const string Planner = "python-edge-safety-dijkstra-v2";
         const string JsonString = "\"(?:[^\"\\\\\\x00-\\x1F]|\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4}))*\"";
         const string Number = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?";
         const string Integer = "-?(?:0|[1-9][0-9]*)";
@@ -119,25 +120,29 @@ namespace SafeMining
         {
             reason = "invalid_route_contract";
             if (result == null || request == null || result.schemaVersion != 1 || result.source != "python-edge" ||
-                result.planner != "python-edge-dijkstra-v1" || result.sessionId != request.sessionId ||
+                result.sessionId != request.sessionId ||
                 result.layoutId != request.layoutId || result.sequence != request.sequence || result.stateRevision != request.stateRevision ||
                 result.startX != request.startX || result.startZ != request.startZ ||
                 result.simulationTimeS != request.simulationTimeS || result.pathX == null || result.pathZ == null ||
                 result.pathX.Length != result.pathZ.Length || result.pathX.Length > 300 ||
                 topic != "safe-mining/v1/" + request.sessionId + "/navigation/response") return false;
+            if (result.planner != Planner) { reason = "navigation_planner_version_mismatch"; return false; }
             if (result.outcome == "no_path")
                 return result.exitIndex == -1 && result.pathX.Length == 0 && result.totalCost == 0;
             if (result.outcome != "route" || result.pathX.Length == 0 || result.exitIndex < 0 || result.exitIndex >= request.exitsX.Length)
                 return false;
             var cells = Points(request.cellsX, request.cellsZ); var closed = Points(request.closedX, request.closedZ);
             var warning = Points(request.warningX, request.warningZ); var visited = new HashSet<Vector2Int>();
+            var warnings = new Dictionary<Vector2Int, float>();
+            foreach (var cell in warning) warnings[cell] = request.warningPenalty;
+            var risk = MineLayout.HazardRisk(cells, closed, warnings, request.stepCost);
             Vector2Int previous = new Vector2Int(request.startX, request.startZ); float cost = 0;
             for (int i = 0; i < result.pathX.Length; i++)
             {
                 var cell = new Vector2Int(result.pathX[i], result.pathZ[i]);
                 if (!cells.Contains(cell) || closed.Contains(cell) || !visited.Add(cell) ||
                     (i == 0 && cell != previous) || (i > 0 && Math.Abs(cell.x - previous.x) + Math.Abs(cell.y - previous.y) != 1)) return false;
-                if (i > 0) cost += request.stepCost + (warning.Contains(cell) ? request.warningPenalty : 0);
+                if (i > 0) cost += request.stepCost + (risk.TryGetValue(cell, out float penalty) ? penalty : 0);
                 previous = cell;
             }
             if (previous != new Vector2Int(request.exitsX[result.exitIndex], request.exitsZ[result.exitIndex]) ||

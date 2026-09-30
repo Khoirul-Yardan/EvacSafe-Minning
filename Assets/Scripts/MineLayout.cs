@@ -75,21 +75,53 @@ namespace SafeMining
         public static Vector3 World(Vector2Int cell) => new Vector3(cell.x * CellSize, 0, cell.y * CellSize);
         public static Vector2Int Cell(Vector3 position) => new Vector2Int(Mathf.RoundToInt(position.x / CellSize), Mathf.RoundToInt(position.z / CellSize));
 
-        // Distance in metres plus an explicit warning penalty; closed cells are never traversable.
+        // Risk spreads along connected corridors, never through a wall. Closed cells remain impassable.
+        public static Dictionary<Vector2Int, float> HazardRisk(HashSet<Vector2Int> cells,
+            HashSet<Vector2Int> closed, Dictionary<Vector2Int, float> warnings, float stepCost = CellSize)
+        {
+            var result = new Dictionary<Vector2Int, float>();
+            var sources = new Dictionary<Vector2Int, float>(warnings);
+            foreach (var cell in closed) sources[cell] = stepCost * 16;
+            foreach (var source in sources)
+            {
+                var queue = new Queue<Vector2Int>(); var depth = new Dictionary<Vector2Int, int> { [source.Key] = 0 };
+                queue.Enqueue(source.Key);
+                while (queue.Count > 0)
+                {
+                    var cell = queue.Dequeue(); int distance = depth[cell];
+                    float penalty = Mathf.Max(0, source.Value) / (1 << distance);
+                    if (cells.Contains(cell) && (!result.TryGetValue(cell, out float known) || penalty > known)) result[cell] = penalty;
+                    if (distance == 2) continue;
+                    foreach (var direction in Directions)
+                    {
+                        var next = cell + direction;
+                        if (!cells.Contains(next) || depth.ContainsKey(next)) continue;
+                        depth[next] = distance + 1; queue.Enqueue(next);
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Minimize accumulated hazard proximity first, then distance. A clear detour wins over a shorter risky route.
         public static List<Vector2Int> FindRiskAwarePath(HashSet<Vector2Int> cells, Vector2Int start,
             HashSet<Vector2Int> blocked, Dictionary<Vector2Int, float> risk, out int exitIndex)
         {
+            risk = HazardRisk(cells, blocked, risk);
             if (risk.Count == 0) return FindPath(cells, start, blocked, out exitIndex);
             exitIndex = -1;
             if (!cells.Contains(start) || blocked.Contains(start)) return new List<Vector2Int>();
             var open = new List<Vector2Int> { start };
             var cost = new Dictionary<Vector2Int, float> { [start] = 0 };
+            var exposure = new Dictionary<Vector2Int, float> { [start] = 0 };
             var previous = new Dictionary<Vector2Int, Vector2Int> { [start] = start };
             var visited = new HashSet<Vector2Int>();
             while (open.Count > 0)
             {
                 int best = 0;
-                for (int i = 1; i < open.Count; i++) if (cost[open[i]] < cost[open[best]]) best = i;
+                for (int i = 1; i < open.Count; i++)
+                    if (exposure[open[i]] < exposure[open[best]] ||
+                        (exposure[open[i]] == exposure[open[best]] && cost[open[i]] < cost[open[best]])) best = i;
                 var p = open[best]; open.RemoveAt(best);
                 if (!visited.Add(p)) continue;
                 int target = Array.IndexOf(Exits, p);
@@ -103,9 +135,11 @@ namespace SafeMining
                 {
                     var n = p + d;
                     if (!cells.Contains(n) || blocked.Contains(n) || visited.Contains(n)) continue;
-                    float next = cost[p] + CellSize + (risk.TryGetValue(n, out float penalty) ? Mathf.Max(0, penalty) : 0);
-                    if (cost.TryGetValue(n, out float known) && next >= known) continue;
-                    cost[n] = next; previous[n] = p; if (!open.Contains(n)) open.Add(n);
+                    float next = cost[p] + CellSize;
+                    float nextExposure = exposure[p] + (risk.TryGetValue(n, out float penalty) ? penalty : 0);
+                    if (exposure.TryGetValue(n, out float known) &&
+                        (nextExposure > known || (nextExposure == known && next >= cost[n]))) continue;
+                    cost[n] = next; exposure[n] = nextExposure; previous[n] = p; open.Remove(n); open.Add(n);
                 }
             }
             return new List<Vector2Int>();

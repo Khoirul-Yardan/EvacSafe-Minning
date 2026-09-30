@@ -56,8 +56,9 @@ namespace SafeMining
             this.mode = mode; this.adaptive = adaptive; reviewing = false;
             title.text = "Sebelum latihan";
             body.text = mode == MiningMode.Story
-                ? "Kenali status detektor dan amati perubahan jalur. Dalam Mode Cerita, pekerja bergerak otomatis. Latihan terpandu memakai skenario terkontrol dan edge lokal dengan data virtual."
-                : "Kenali status detektor dan petunjuk evakuasi. WASD bergerak, mouse melihat, Shift berlari. Latihan terpandu memakai skenario terkontrol dan edge lokal dengan data virtual.";
+                ? "Kenali status detektor dan amati perubahan jalur. Pekerja berhenti untuk memeriksa edge sebelum melanjutkan. "
+                : "Kenali status detektor dan petunjuk evakuasi. WASD bergerak, mouse melihat, Shift berlari. ";
+            body.text += "Pilihan skenario tetap: " + MiningHUD.ScenarioName(simulation.scenarioMode) + ". Latihan terpandu memakai edge lokal dengan data virtual.";
             feedback.text = "Pilih jawaban awal. Jawaban akan dibandingkan dengan refleksi setelah latihan.";
             next.label.text = "Mulai latihan terpandu";
             skip.label.text = "Lewati dan mulai simulasi biasa";
@@ -103,14 +104,14 @@ namespace SafeMining
         {
             if (reviewing) { Root.SetActive(false); return; }
             if (selected < 0) return;
-            simulation.Begin(mode, adaptive, true); simulation.RecordLearningPreAnswer(selected == 0);
+            simulation.BeginNewSession(mode, adaptive, true); simulation.RecordLearningPreAnswer(selected == 0);
             Root.SetActive(false); started?.Invoke();
         }
         void Skip()
         {
             Root.SetActive(false);
             if (reviewing) return;
-            simulation.Begin(mode, adaptive); started?.Invoke();
+            simulation.BeginNewSession(mode, adaptive); started?.Invoke();
         }
     }
 }

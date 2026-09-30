@@ -316,7 +316,7 @@ namespace SafeMining
             TrackLevels(s);
             bool fpp = s.Mode == MiningMode.FirstPerson;
 
-            modeIcon.text = fpp ? I.Walk : I.Watch; modeText.text = fpp ? "FPP" : "Cerita";
+            modeIcon.text = fpp ? I.Walk : I.Watch; modeText.text = (fpp ? "FPP" : "Cerita") + " / " + MiningHUD.ScenarioName(s.ActiveScenario);
             navigationIcon.text = s.Adaptive ? I.Route : I.RouteFixed; navigationText.text = s.Adaptive ? "Adaptif" : "Statis";
             int focus = Focus(s);
             int level = focus >= 0 ? s.HazardLevels[focus] : 0;
@@ -325,6 +325,7 @@ namespace SafeMining
                 level == 2 ? "Lorong tertutup · " + id : level == 1 ? "Waspada · " + id : s.NavigationWaiting ? "Menunggu rute edge" : s.Elapsed < 4 && !fpp ? "Briefing" : "Menuju zona aman",
                 level == 2 ? S.Danger : level == 1 ? S.Warning : S.TextPrimary);
             SetSource(s);
+            if (s.StoryHolding) SetHeadline(I.Stop, s.Phase, S.Warning);
 
             equipmentRow.SetActive(fpp);
             SetEquipment(lampIcon, lampText, s.HeadlampEnabled, "Lampu helm");
@@ -425,9 +426,9 @@ namespace SafeMining
                 Stage(1, applied > 0, "Status " + levelName + " ditetapkan jadwal");
             }
             bool navigationFailed = s.EdgeRouteSession != null && s.EdgeRouteSession.Failed;
-            string routeStatus = !s.Adaptive ? "; rute statis tetap" : navigationFailed ? "; navigasi edge gagal" :
+            string routeStatus = s.StoryHolding ? "; pekerja berhenti, pemeriksaan jalur berlangsung" : !s.Adaptive ? "; rute statis tetap" : navigationFailed ? "; navigasi edge gagal" :
                 s.NavigationWaiting ? "; menunggu rute edge" : "; rute terbaru diterapkan";
-            Stage(2, applied > 0 && !navigationFailed && (!s.Adaptive || !s.NavigationWaiting), applied > 0
+            Stage(2, applied > 0 && !s.StoryHolding && !navigationFailed && (!s.Adaptive || !s.NavigationWaiting), applied > 0
                 ? "Diterapkan: " + levelName + routeStatus
                 : "Belum diterapkan ke lorong");
         }
@@ -461,6 +462,7 @@ namespace SafeMining
             bannerIcon.text = isClosed ? I.Closed : I.Warning;
             bannerTitle.text = DeviceId(index) + (isClosed ? " lorong tertutup longsor" : " waspada, getaran meningkat");
             if (s.EdgeRouteSession != null && s.EdgeRouteSession.Failed) { bannerRouteIcon.text = I.Stop; bannerRoute.text = "Layanan navigasi tidak tersedia"; }
+            else if (s.StoryHolding) { bannerRouteIcon.text = I.Stop; bannerRoute.text = s.Phase + " / pekerja tetap diam"; }
             else if (s.NavigationWaiting) { bannerRouteIcon.text = I.Clock; bannerRoute.text = "Menunggu rute terbaru dari edge"; }
             else if (s.TargetExit < 0) { bannerRouteIcon.text = I.Stop; bannerRoute.text = "Tidak ada rute aman yang tersisa"; }
             else if (s.Adaptive) { bannerRouteIcon.text = I.Route; bannerRoute.text = "Rute ke zona aman " + (s.TargetExit + 1) + " · " + s.RouteDistance.ToString("F0") + " m"; }
@@ -484,6 +486,7 @@ namespace SafeMining
             }
             directionIcon.text = glyph; directionIcon.color = directionText.color = color; directionText.text = text;
             distanceText.text = !glasses ? "Tekan G untuk menyalakan petunjuk"
+                : s.StoryHolding ? "Jalur ditahan sampai pemeriksaan selesai"
                 : !s.NavigationWaiting && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + " · " + s.RouteDistance.ToString("F0") + " m" : "Menunggu rute";
         }
 

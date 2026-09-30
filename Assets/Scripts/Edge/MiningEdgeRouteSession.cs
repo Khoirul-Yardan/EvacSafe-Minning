@@ -26,7 +26,7 @@ namespace SafeMining
         long sequence;
         int generation;
         bool published, stopped;
-        double requestedAt, publishedAt, pausedAt = -1;
+        double requestedAt, publishedAt, lastSentAt, pausedAt = -1;
         public bool Pending => pending != null;
         public bool HasRoute { get; private set; }
         public bool Failed { get; private set; }
@@ -35,6 +35,13 @@ namespace SafeMining
         public bool NeedsRequest { get; private set; }
         public bool HadPause { get; private set; }
         public string FailureReason { get; private set; }
+        public string FailureMessage => FailureReason == "navigation_broker_unavailable"
+            ? "Unity belum terhubung ke broker MQTT. Jalankan broker dan Python edge, lalu pilih Ulangi skenario. Periksa host dan port jika memakai komputer lain."
+            : FailureReason == "navigation_planner_version_mismatch"
+            ? "Versi planner Python tidak sesuai dengan Unity. Bangun ulang layanan Python edge dengan kode terbaru, lalu pilih Ulangi skenario."
+            : FailureReason == "navigation_timeout"
+            ? "Broker MQTT terhubung, tetapi rute Python edge yang valid belum diterima dalam 5 detik. Pastikan layanan python-edge berjalan bersama broker, lalu pilih Ulangi skenario."
+            : "Data navigasi edge tidak dapat digunakan. Periksa detail sistem dan ulangi sesi setelah layanan tersedia.";
         public float LastPlanningMs { get; private set; }
         public float LastRoundTripMs { get; private set; }
         public float MaxPlanningMs { get; private set; }
@@ -67,7 +74,8 @@ namespace SafeMining
             if (pending == null || !mqtt.Connected) return;
             if (mqtt.Publish(pending.Topic, JsonUtility.ToJson(pending)))
             {
-                published = true; publishedAt = clock.Elapsed.TotalMilliseconds;
+                if (!published) publishedAt = clock.Elapsed.TotalMilliseconds;
+                published = true; lastSentAt = clock.Elapsed.TotalMilliseconds;
                 Record("request_queued", pending, null, "");
             }
         }
@@ -88,7 +96,8 @@ namespace SafeMining
             }
             if (pausedAt >= 0)
             {
-                requestedAt += clock.Elapsed.TotalMilliseconds - pausedAt; pausedAt = -1;
+                double duration = clock.Elapsed.TotalMilliseconds - pausedAt;
+                requestedAt += duration; lastSentAt += duration; pausedAt = -1;
                 Record("resume", pending, null, "");
             }
             if (Failed) return;
@@ -102,14 +111,20 @@ namespace SafeMining
                     Record("request_reconnect", pending, null, "");
                 }
             }
-            if (pending != null && !published) Publish();
+            // QoS confirms broker receipt, not that Python was subscribed yet. Repeat the same
+            // idempotent request during startup without extending the timeout or changing its id.
+            if (pending != null && (!published || clock.Elapsed.TotalMilliseconds - lastSentAt >= 1000)) Publish();
             while (mqtt.TryReceive(out var delivery))
             {
                 var result = MiningRouteContract.Parse(delivery.payload);
                 Record("response_receive", pending, result, "", delivery.monotonicMs);
                 string reason = "retained_response";
                 if (delivery.retained || !MiningRouteContract.Validate(delivery.topic, result, pending, out reason))
-                { Record("response_reject", pending, result, reason); continue; }
+                {
+                    Record("response_reject", pending, result, reason);
+                    if (reason == "navigation_planner_version_mismatch") { Fail(reason); return; }
+                    continue;
+                }
                 if (!apply(result))
                 {
                     Record("response_stale", pending, result, "position_or_hazard_revision_changed");
@@ -124,7 +139,7 @@ namespace SafeMining
                 Record("response_applied", pending, result, ""); pending = null;
             }
             if (pending != null && clock.Elapsed.TotalMilliseconds - requestedAt > TimeoutSeconds * 1000)
-                Fail("navigation_timeout");
+                Fail(mqtt.Connected ? "navigation_timeout" : "navigation_broker_unavailable");
         }
         void Fail(string reason)
         {

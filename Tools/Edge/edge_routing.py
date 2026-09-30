@@ -10,10 +10,11 @@ import json
 import math
 import re
 import time
+from collections import deque
 
 
 ROOT = "safe-mining/v1/"
-PLANNER = "python-edge-dijkstra-v1"
+PLANNER = "python-edge-safety-dijkstra-v2"
 DIRECTIONS = ((0, 1), (-1, 0), (1, 0), (0, -1))
 FIELDS = {
     "schemaVersion", "sessionId", "layoutId", "source", "sequence", "stateRevision",
@@ -91,20 +92,43 @@ def parse_request(topic, payload, retained=False):
     return request, occupied, exits, set(closed), set(warning)
 
 
+def hazard_risk(cells, closed, warning, step_cost, warning_penalty):
+    """Two connected cells of clearance; use the strongest nearby signal, not a wall-crossing radius."""
+    risk = {}
+    sources = {cell: warning_penalty for cell in warning}
+    sources.update({cell: step_cost * 16 for cell in closed})
+    for source, strength in sources.items():
+        queue, depth = deque([source]), {source: 0}
+        while queue:
+            cell = queue.popleft()
+            distance = depth[cell]
+            if cell in cells:
+                risk[cell] = max(risk.get(cell, 0), strength / (2 ** distance))
+            if distance == 2:
+                continue
+            for dx, dz in DIRECTIONS:
+                neighbor = cell[0] + dx, cell[1] + dz
+                if neighbor in cells and neighbor not in depth:
+                    depth[neighbor] = distance + 1
+                    queue.append(neighbor)
+    return risk
+
+
 def plan_route(request, cells, exits, closed, warning):
     started = time.perf_counter_ns()
     start = request["startX"], request["startZ"]
     path, target, total = [], -1, 0.0
+    risk = hazard_risk(cells, closed, warning, request["stepCost"], request["warningPenalty"])
     if start in cells and start not in closed:
         # Insertion ordinal fixes tie ordering to up, left, right, down.
-        queue = [(0.0, 0, start)]
-        distance, previous, ordinal = {start: 0.0}, {start: start}, 0
+        queue = [(0.0, 0.0, 0, start)]
+        distance, previous, ordinal = {start: (0.0, 0.0)}, {start: start}, 0
         while queue:
-            cost, _, cell = heapq.heappop(queue)
-            if cost != distance[cell]:
+            exposure, cost, _, cell = heapq.heappop(queue)
+            if (exposure, cost) != distance[cell]:
                 continue
             if cell in exits:
-                target, total = exits.index(cell), cost
+                target, total = exits.index(cell), exposure + cost
                 path = [cell]
                 while cell != start:
                     cell = previous[cell]
@@ -115,14 +139,12 @@ def plan_route(request, cells, exits, closed, warning):
                 neighbor = cell[0] + dx, cell[1] + dz
                 if neighbor not in cells or neighbor in closed:
                     continue
-                candidate = cost + request["stepCost"]
-                if neighbor in warning:
-                    candidate += request["warningPenalty"]
-                if candidate >= distance.get(neighbor, math.inf):
+                candidate = exposure + risk.get(neighbor, 0), cost + request["stepCost"]
+                if candidate >= distance.get(neighbor, (math.inf, math.inf)):
                     continue
                 distance[neighbor], previous[neighbor] = candidate, cell
                 ordinal += 1
-                heapq.heappush(queue, (candidate, ordinal, neighbor))
+                heapq.heappush(queue, (*candidate, ordinal, neighbor))
     planning_ms = (time.perf_counter_ns() - started) / 1000000.0
     return {
         "schemaVersion": 1, "sessionId": request["sessionId"], "layoutId": request["layoutId"],

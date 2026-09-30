@@ -8,6 +8,14 @@ docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compos
 
 Perintah tersebut menyalakan Mosquitto dan layanan keputusan edge Python di container terpisah. Unity mengirim sampel sensor; layanan Python mengolah ambang/durasi dan mengirim status kembali ke Unity. Scene utama menggunakan `MqttEdgeSimulation`, `127.0.0.1:1883`. Broker mengikat port host hanya pada loopback. Lihat [panduan implementasi](../../Documentation/EDGE_MQTT.md).
 
+Python juga menghitung rute. Jika hanya broker aktif, Unity akan berhenti menunggu rute setelah lima detik. Pastikan kedua layanan berstatus **Up**, lalu pilih **Ulangi skenario**:
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml ps
+```
+
+Setelah perubahan planner, gunakan kembali perintah `up -d --build` di atas agar Python dan Unity memakai versi yang sesuai.
+
 Amati pesan yang benar-benar melewati broker:
 
 ```powershell
