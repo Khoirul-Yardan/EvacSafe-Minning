@@ -39,6 +39,8 @@ namespace SafeMining
         // Cutscene
         Text cutsceneTitle, cutsceneStatus;
         // Radio, direction, hints
+        const float RadioWidth = 560, DirectionWidth = 300;
+        RectTransform radioCard, directionCard;
         Text dialogue, directionIcon, directionText, distanceText;
         GameObject storyHints, fppHints;
         // FPP overlays
@@ -245,14 +247,16 @@ namespace SafeMining
 
         void BuildRadio(Transform root)
         {
-            var card = Floating(root, "Team radio", Vector2.zero, new Vector2(24, 24), 560);
+            var card = Floating(root, "Team radio", Vector2.zero, new Vector2(24, 24), RadioWidth);
+            radioCard = (RectTransform)card;
             IconLabel(card, "Speaker", I.Radio, "Radio tim", S.Strong, S.SizeCaption, S.TextSecondary);
             dialogue = Label(card, "Dialogue", "", S.Body, S.SizeBody, S.TextPrimary);
         }
 
         void BuildDirection(Transform root)
         {
-            var card = Floating(root, "Direction", new Vector2(.5f, 0), new Vector2(0, 24), 300);
+            var card = Floating(root, "Direction", new Vector2(.5f, 0), new Vector2(0, 24), DirectionWidth);
+            directionCard = (RectTransform)card;
             ((VerticalLayoutGroup)card.GetComponent<LayoutGroup>()).childAlignment = TextAnchor.UpperCenter;
             directionIcon = Label(card, "Arrow", "", S.Icons, 44, S.Safe, TextAnchor.MiddleCenter);
             directionText = Label(card, "Direction", "", S.Heading, 26, S.Safe, TextAnchor.MiddleCenter);
@@ -309,11 +313,28 @@ namespace SafeMining
 
         public void ResetDetail() => showDetail = false;
 
+        // On narrow screens (4:3, 5:4) nothing may run under the centred direction card: the radio card
+        // shrinks, and a key hint row that is too wide moves up above the direction card.
+        void FitBottomRow()
+        {
+            float room = ((RectTransform)Root.transform).rect.width / 2f - DirectionWidth / 2f - 24 - 16;
+            foreach (var hints in new[] { storyHints, fppHints })
+            {
+                var r = (RectTransform)hints.transform;
+                r.anchoredPosition = new Vector2(-24, r.rect.width <= room ? 28 : directionCard.rect.height + 24 + 12);
+            }
+            float width = Mathf.Clamp(room, 280, RadioWidth);
+            if (Mathf.Abs(radioCard.rect.width - width) < .5f) return;
+            radioCard.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            radioCard.GetComponent<LayoutElement>().preferredWidth = radioCard.GetComponent<LayoutElement>().minWidth = width;
+        }
+
         public void Refresh()
         {
             var s = simulation;
             Observe(s.EdgeSession);
             TrackLevels(s);
+            FitBottomRow();
             bool fpp = s.Mode == MiningMode.FirstPerson;
 
             modeIcon.text = fpp ? I.Walk : I.Watch; modeText.text = (fpp ? "FPP" : "Cerita") + " / " + MiningHUD.ScenarioName(s.ActiveScenario);

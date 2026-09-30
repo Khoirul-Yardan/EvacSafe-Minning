@@ -88,7 +88,9 @@ Panel kamera longsor tetap dikendalikan `MiningLandslideCutscene` tanpa perubaha
 
 ## Pengujian
 
-Diuji di Unity 6000.3.23f1, Game view 1920×1080, melalui Play mode: menu (pilih FPP dan edge lokal, lalu mulai), HUD Cerita saat waspada dan tertutup dengan kamera longsor, HUD FPP dengan detail sistem, panel jeda Cerita dan FPP termasuk pengaturan kamera, hasil berhasil, hasil terhalang, dan perbandingan adaptif lawan statis. Tidak ada error compile atau runtime. Jalur MQTT dengan broker nyata, resolusi 1280×720 dan 16:10, serta build player belum diuji.
+Diuji di Unity 6000.3.23f1, Game view 1920×1080, melalui Play mode: menu (pilih FPP dan edge lokal, lalu mulai), HUD Cerita saat waspada dan tertutup dengan kamera longsor, HUD FPP dengan detail sistem, panel jeda Cerita dan FPP termasuk pengaturan kamera, hasil berhasil, hasil terhalang, dan perbandingan adaptif lawan statis. Tidak ada error compile atau runtime.
+
+30 September: diuji juga pada 1280×720 dan 1366×768 (16:9), 1280×800 (16:10), serta 1024×768 (4:3, proyektor lama), untuk menu, HUD Cerita dan FPP saat waspada dan tertutup dengan kamera longsor, panel jeda Cerita dan FPP, serta panel hasil. Tiga masalah di 4:3 diperbaiki: menu tidak lagi diperkecil bila sebenarnya muat, kartu radio menyempit agar tidak tertimpa kartu arah, dan deretan petunjuk tombol FPP naik ke atas kartu arah bila tidak muat di sampingnya. Jalur MQTT dengan broker nyata dan build player belum diuji.
 
 ## Catatan untuk runner validasi
 

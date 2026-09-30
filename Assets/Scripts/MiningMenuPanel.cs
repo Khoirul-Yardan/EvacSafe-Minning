@@ -175,11 +175,13 @@ namespace SafeMining
             fppControls.SetActive(mode == MiningMode.FirstPerson);
         }
 
-        // Keeps the two-column layout inside narrow aspect ratios (e.g. 4:3 projectors).
+        // Keeps the two-column layout on screen. Shrinks only when it does not fit, so 4:3 and 16:10 stay full size.
         public void FitToScreen()
         {
-            float aspect = Screen.height > 0 ? Screen.width / (float)Screen.height : 16f / 9f;
-            content.localScale = Vector3.one * Mathf.Clamp(aspect / 1.72f, .72f, 1f);
+            var area = ((RectTransform)content.parent).rect;
+            if (content.rect.width <= 0 || area.width <= 0) return;
+            float fit = Mathf.Min((area.width - 64) / content.rect.width, (area.height - 48) / content.rect.height);
+            content.localScale = Vector3.one * Mathf.Clamp(fit, .6f, 1f);
         }
     }
 }
