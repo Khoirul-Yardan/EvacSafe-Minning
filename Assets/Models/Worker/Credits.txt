@@ -1,0 +1,20 @@
+SAFE-MINING EVAC worker character: sources and licences
+
+1. "Man Miner Rig .FBX" by Dakta.Grower.Nzl
+   https://sketchfab.com/3d-models/man-miner-rig-fbx-eb895e0253324ef4b70c6793a10bbc3f
+   Licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+   Changes: hair mesh removed, bundled animations removed, bone name suffixes removed,
+   root transform applied, smart glasses and headlamp attached to the head bone.
+
+2. "FUTURISTIC GLASSES | Super Sun glasses | Goggles" by MR EXPERT (Rahul.Kumar5)
+   https://sketchfab.com/3d-models/futuristic-glasses-super-sun-glasses-goggles-43629559e7564867888c303361d163de
+   Licence: CC BY 4.0
+   Changes: scaled and fitted to the face, lens and frame materials recoloured.
+
+3. "Duracell Headlamp" by Eric Wallbank (Ericwallbank)
+   https://sketchfab.com/3d-models/duracell-headlamp-a830876258994658ad05e8b71d402972
+   Licence: CC BY 4.0
+   Changes: head strap removed, lamp mounted on the helmet front, brand logo removed
+   from the normal map.
+
+Animations (Animations/Mixamo): Adobe Mixamo, royalty free for use in games.
