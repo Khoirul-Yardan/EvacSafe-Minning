@@ -1,12 +1,33 @@
 # Getaran, edge virtual, dan MQTT — implementasi Orang 1
 
+## Pembaruan cerita 30 September 2026
+
+### Jika muncul "Navigasi tidak tersedia" pada detik 5
+
+Broker MQTT saja belum cukup: rute dihitung oleh layanan `python-edge`. Pada pemeriksaan 30 September, hanya container broker yang aktif; setelah `python-edge` dibangun dan dinyalakan, pengujian Unity–broker–Python berhasil menerima rute awal dan rute setelah longsor.
+
+```powershell
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml up -d --build
+docker compose --profile simulated-edge -p safe-mining-edge -f Tools/Mqtt/compose.yaml ps
+```
+
+Pastikan **broker** dan **python-edge** berstatus **Up**, kemudian pilih **Ulangi skenario** di Unity. Pesan sekarang membedakan broker belum terhubung (`navigation_broker_unavailable`), broker terhubung tanpa balasan rute valid (`navigation_timeout`), serta planner Python versi lama (`navigation_planner_version_mismatch`). Versi lama memerlukan build ulang dengan perintah di atas.
+
+Selama menunggu, Unity mengirim ulang request yang sama setiap satu detik agar Python yang baru berlangganan dapat menerimanya. Batas tunggu tetap lima detik, tanpa fallback lokal dan tanpa menganggap ACK broker sebagai hasil planner. Respons versi salah hanya dikategorikan sebagai kesalahan versi jika identitas sesi/request cocok.
+
+[Hasil pengujian MQTT langsung](Validation/navigation-live-2026-09-30.txt) mencakup rute awal, status sensor Python, berhenti saat pemeriksaan, pemetaan ulang setelah longsor, dan pesan broker tidak tersedia. Runner: `MiningNavigationValidation.RunBatch` pada salinan proyek dengan dua layanan aktif.
+
+Planner diperbarui menjadi `python-edge-safety-dijkstra-v2`: risiko kedekatan bahaya diutamakan sebelum jarak, sama dengan planner lokal. Bentuk pesan tetap v1; respons planner lama ditolak agar Unity tidak menerapkan kebijakan lama. Jalankan ulang perintah Docker dengan `--build` setelah memperbarui kode. [Rincian kebijakan dan Random](SAFE_ROUTING_RANDOM.md).
+
+Mode Cerita kini berhenti pada getaran, menunggu konfirmasi lokasi dari edge, menampilkan kamera longsor, lalu memetakan ulang sebelum berjalan lagi. Efek pipa, retakan, debu, dan dialog menjelaskan urutannya. FPP tetap manual. Lihat [alur cerita, perbedaan sumber, dan perubahan metrik](STORY_EDGE_FLOW.md); penjelasan historis di bawah yang menyebut reroute langsung telah digantikan untuk Mode Cerita.
+
 ## Pembaruan planner edge 29 September 2026
 
 Pada `MqttEdgeSimulation`, klasifikasi bahaya **dan pencarian rute** kini ditempatkan
 di proses Python terpisah. Unity mengirim snapshot graf, lokasi detektor, posisi
 agen, exit, sel tertutup, sel waspada, serta penalti melalui
 `safe-mining/v1/{sessionId}/navigation/request`. Python (`Tools/Edge/edge_routing.py`)
-menjalankan Dijkstra dengan biaya langkah 6 dan penalti peringatan, lalu mengirim
+menjalankan Dijkstra dengan urutan biaya risiko lalu jarak (langkah 6 meter), lalu mengirim
 jalur lewat `safe-mining/v1/{sessionId}/navigation/response` (QoS 1, tanpa retain).
 Request dan response memakai `sequence`, `stateRevision`, `sessionId`, dan
 `layoutId`. Python memeriksa hash graf/detektor; Unity memeriksa korelasi,

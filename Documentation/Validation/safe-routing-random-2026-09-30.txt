@@ -1,0 +1,14 @@
+PASS safety routing: early right detour for center/left closures, retreat from danger, mirrored left detour, warning clearance, unchanged no-hazard route.
+PASS 128 random seeds: every detector eligible as first event; no duplicate sites per run; same seed reproduces locations/timing.
+PASS 32 route contracts with clearance costs; outdated planner version rejected; parity fixtures exported.
+PASS actual guided start preserves Random; retry keeps seed/schedule; new menu session gets new seed; guided NoHazards stays empty.
+PASS simultaneous closures: no early reroute; wait for both shots; map avoids closures; resume after ready.
+PASS warning clears without collapse; repeated incident holds again; reset clears story state.
+PASS static route stays fixed and stops; FPP unaffected.
+PASS raw vibration stops before decision; outdated normal snapshot cannot release hold.
+PASS stale edge data holds worker; a new tremor interrupts route readiness.
+PASS live LocalEdgeSimulation: walks first, stops on sample, edge/collapse clocks continue, pause freezes, remains still during inspection and mapping, resumes along safe route.
+PASS All story checks passed.
+PASS 18 Python unit tests (routing and edge classification).
+PASS 32 independently checked C#/Python parity fixtures: path, exit, outcome, totalCost, planner, parsed request contract.
+Broker/Python network integration not rerun; tests use local Unity execution and Python planner/contract parity.

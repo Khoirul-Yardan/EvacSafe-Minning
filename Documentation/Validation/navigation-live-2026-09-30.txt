@@ -1,0 +1,4 @@
+PASS real MQTT startup: broker + Python v2 return route; worker moves before first tremor; sensor status current.
+PASS real MQTT story: Python confirms closure, actor holds, v2 route arrives and avoids landslide, then story resumes.
+PASS unavailable broker: explicit broker error, no movement and no local fallback.
+PASS Navigation integration passed.

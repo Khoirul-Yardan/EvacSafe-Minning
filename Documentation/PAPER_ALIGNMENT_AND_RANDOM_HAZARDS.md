@@ -1,5 +1,7 @@
 # Kesesuaian paper, longsor acak, dan perangkat deteksi
 
+> Pembaruan 30 September 2026: bagian audit paper/hasil lama di bawah bersifat historis. Planner MQTT kini berjalan di Python; planner v2 mengutamakan risiko kedekatan sebelum jarak. Random memakai seluruh lokasi sejak kejadian pertama dan pilihan menu tetap berlaku dalam latihan terpandu. Lihat [perubahan rute dan Random](SAFE_ROUTING_RANDOM.md) untuk kebijakan serta validasi terkini.
+
 > Pembaruan 27 September 2026: jalur MQTT kini mengirim sampel dari Unity ke layanan keputusan edge Python terpisah, lalu menerima status untuk memperbarui bahaya dan rute. Sensor/getaran masih virtual dan planner tetap C# lokal. Implementasi terkini, kontrak perangkat, konfigurasi, dan batas validasinya ada di [EDGE_MQTT.md](EDGE_MQTT.md).
 
 Pembaruan 23 September 2026. Dokumen ini menggantikan keterangan tentang tiga lokasi bahaya tetap, timeline tunggal, dan BFS tanpa bobot pada update sebelumnya.
@@ -30,7 +32,7 @@ Penomoran referensi di pendahuluan juga perlu diperiksa: pembahasan UWB menunjuk
 
 Skenario default sekarang **Random**. Daftar lokasi detektor dibuat deterministik dari denah: tiga lokasi lama dipertahankan sebagai ID 0-2, lalu kandidat lain ditambahkan dengan jarak antartitik hingga maksimum 12 lokasi. Kandidat tambahan menjauhi spawn dan zona aman serta memiliki sisi dinding untuk pemasangan perangkat.
 
-Sebelum aktor berjalan, generator memilih jadwal kejadian dengan `System.Random(seed)`. Setiap kejadian memakai lokasi berbeda. Lokasi pertama dipilih acak pada rute awal jika tersedia kandidat yang, ketika ditutup, masih menyisakan alternatif dari spawn. Kejadian berikutnya dipilih acak dari kandidat lain. Jadi ini **sampling terkontrol untuk menguji reroute**, bukan pemilihan seragam atas seluruh sel tambang.
+Sebelum aktor berjalan, generator memilih jadwal kejadian dengan `System.Random(seed)`. Setiap kejadian memakai lokasi berbeda. Mulai 30 September, lokasi pertama dan berikutnya dipilih dari seluruh kandidat detektor yang belum terpakai, tanpa prioritas rute tengah. Sampling berlaku atas lokasi detektor, bukan seluruh sel tambang.
 
 Default: tiga kejadian, peringatan pertama pada 6-8 detik, jeda peringatan ke longsor 4 detik, dan peringatan berikutnya 6-8 detik setelah longsor sebelumnya. Kejadian yang dijadwalkan setelah pekerja mencapai hasil akhir tidak dieksekusi, tetapi tetap dicatat dalam file skenario.
 
@@ -42,7 +44,7 @@ Tidak ada jaminan semua skenario dapat diselesaikan. Longsor berikutnya dapat me
 
 | Pengaturan | Arti |
 |---|---|
-| Random Seed On Launch | Saat masuk Play, pilih seed baru sekali; default aktif |
+| Random Seed On Launch | Seed baru saat masuk Play dan sesi Random baru dari menu; Ulang/Bandingkan mempertahankan seed; default aktif |
 | Scenario Seed | Seed yang digunakan untuk sesi berikutnya; matikan Random Seed On Launch untuk seed eksperimen tetap |
 | Scenario Mode = Random | Lokasi dan waktu acak terkontrol |
 | Scenario Mode = Scripted | Kontrol lama: D01 waspada pada 6 s/tertutup 10 s; D02 waspada 19 s/tertutup 23 s |
@@ -53,7 +55,7 @@ Tidak ada jaminan semua skenario dapat diselesaikan. Longsor berikutnya dapat me
 | Warning Duration Seconds | Jarak waktu peringatan ke longsor, minimum efektif 2 s |
 | Warning Risk Penalty | Tambahan biaya planner ketika memasuki sel waspada; default 24, minimum efektif 0 |
 
-Menu menyediakan **Acak skenario baru** dan pergantian **Acak / Tetap / Tanpa bahaya**. Seed terlihat di menu dan panel hasil. Tombol **R**, tombol ulang, serta mulai kembali dari menu memakai seed yang sama. Untuk variasi baru, kembali ke menu lalu pilih Acak skenario baru. Parameter dibaca saat sesi dimulai; mengubahnya di tengah sesi tidak mengganti jadwal aktif.
+Menu menyediakan **Acak ulang** dan pergantian **Acak / Terkontrol / Tanpa bahaya**. Panel hasil menyimpan seed; HUD menampilkan skenario aktif. Tombol ulang/bandingkan dan **R** pada simulasi biasa memakai seed yang sama. Sesi Random baru dari menu memakai seed baru jika Random Seed On Launch aktif; untuk seed eksperimen tetap, matikan opsi itu. Parameter dibaca saat sesi dimulai; mengubahnya di tengah sesi tidak mengganti jadwal aktif.
 
 ## Satu aset detektor, dipasang berulang di tunnel
 

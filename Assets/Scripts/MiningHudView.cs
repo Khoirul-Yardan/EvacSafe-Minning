@@ -39,6 +39,8 @@ namespace SafeMining
         // Cutscene
         Text cutsceneTitle, cutsceneStatus;
         // Radio, direction, hints
+        const float RadioWidth = 560, DirectionWidth = 300;
+        RectTransform radioCard, directionCard;
         Text dialogue, directionIcon, directionText, distanceText;
         GameObject storyHints, fppHints;
         // FPP overlays
@@ -245,14 +247,16 @@ namespace SafeMining
 
         void BuildRadio(Transform root)
         {
-            var card = Floating(root, "Team radio", Vector2.zero, new Vector2(24, 24), 560);
+            var card = Floating(root, "Team radio", Vector2.zero, new Vector2(24, 24), RadioWidth);
+            radioCard = (RectTransform)card;
             IconLabel(card, "Speaker", I.Radio, "Radio tim", S.Strong, S.SizeCaption, S.TextSecondary);
             dialogue = Label(card, "Dialogue", "", S.Body, S.SizeBody, S.TextPrimary);
         }
 
         void BuildDirection(Transform root)
         {
-            var card = Floating(root, "Direction", new Vector2(.5f, 0), new Vector2(0, 24), 300);
+            var card = Floating(root, "Direction", new Vector2(.5f, 0), new Vector2(0, 24), DirectionWidth);
+            directionCard = (RectTransform)card;
             ((VerticalLayoutGroup)card.GetComponent<LayoutGroup>()).childAlignment = TextAnchor.UpperCenter;
             directionIcon = Label(card, "Arrow", "", S.Icons, 44, S.Safe, TextAnchor.MiddleCenter);
             directionText = Label(card, "Direction", "", S.Heading, 26, S.Safe, TextAnchor.MiddleCenter);
@@ -309,14 +313,31 @@ namespace SafeMining
 
         public void ResetDetail() => showDetail = false;
 
+        // On narrow screens (4:3, 5:4) nothing may run under the centred direction card: the radio card
+        // shrinks, and a key hint row that is too wide moves up above the direction card.
+        void FitBottomRow()
+        {
+            float room = ((RectTransform)Root.transform).rect.width / 2f - DirectionWidth / 2f - 24 - 16;
+            foreach (var hints in new[] { storyHints, fppHints })
+            {
+                var r = (RectTransform)hints.transform;
+                r.anchoredPosition = new Vector2(-24, r.rect.width <= room ? 28 : directionCard.rect.height + 24 + 12);
+            }
+            float width = Mathf.Clamp(room, 280, RadioWidth);
+            if (Mathf.Abs(radioCard.rect.width - width) < .5f) return;
+            radioCard.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            radioCard.GetComponent<LayoutElement>().preferredWidth = radioCard.GetComponent<LayoutElement>().minWidth = width;
+        }
+
         public void Refresh()
         {
             var s = simulation;
             Observe(s.EdgeSession);
             TrackLevels(s);
+            FitBottomRow();
             bool fpp = s.Mode == MiningMode.FirstPerson;
 
-            modeIcon.text = fpp ? I.Walk : I.Watch; modeText.text = fpp ? "FPP" : "Cerita";
+            modeIcon.text = fpp ? I.Walk : I.Watch; modeText.text = (fpp ? "FPP" : "Cerita") + " / " + MiningHUD.ScenarioName(s.ActiveScenario);
             navigationIcon.text = s.Adaptive ? I.Route : I.RouteFixed; navigationText.text = s.Adaptive ? "Adaptif" : "Statis";
             int focus = Focus(s);
             int level = focus >= 0 ? s.HazardLevels[focus] : 0;
@@ -325,6 +346,7 @@ namespace SafeMining
                 level == 2 ? "Lorong tertutup · " + id : level == 1 ? "Waspada · " + id : s.NavigationWaiting ? "Menunggu rute edge" : s.Elapsed < 4 && !fpp ? "Briefing" : "Menuju zona aman",
                 level == 2 ? S.Danger : level == 1 ? S.Warning : S.TextPrimary);
             SetSource(s);
+            if (s.StoryHolding) SetHeadline(I.Stop, s.Phase, S.Warning);
 
             equipmentRow.SetActive(fpp);
             SetEquipment(lampIcon, lampText, s.HeadlampEnabled, "Lampu helm");
@@ -425,9 +447,9 @@ namespace SafeMining
                 Stage(1, applied > 0, "Status " + levelName + " ditetapkan jadwal");
             }
             bool navigationFailed = s.EdgeRouteSession != null && s.EdgeRouteSession.Failed;
-            string routeStatus = !s.Adaptive ? "; rute statis tetap" : navigationFailed ? "; navigasi edge gagal" :
+            string routeStatus = s.StoryHolding ? "; pekerja berhenti, pemeriksaan jalur berlangsung" : !s.Adaptive ? "; rute statis tetap" : navigationFailed ? "; navigasi edge gagal" :
                 s.NavigationWaiting ? "; menunggu rute edge" : "; rute terbaru diterapkan";
-            Stage(2, applied > 0 && !navigationFailed && (!s.Adaptive || !s.NavigationWaiting), applied > 0
+            Stage(2, applied > 0 && !s.StoryHolding && !navigationFailed && (!s.Adaptive || !s.NavigationWaiting), applied > 0
                 ? "Diterapkan: " + levelName + routeStatus
                 : "Belum diterapkan ke lorong");
         }
@@ -461,6 +483,7 @@ namespace SafeMining
             bannerIcon.text = isClosed ? I.Closed : I.Warning;
             bannerTitle.text = DeviceId(index) + (isClosed ? " lorong tertutup longsor" : " waspada, getaran meningkat");
             if (s.EdgeRouteSession != null && s.EdgeRouteSession.Failed) { bannerRouteIcon.text = I.Stop; bannerRoute.text = "Layanan navigasi tidak tersedia"; }
+            else if (s.StoryHolding) { bannerRouteIcon.text = I.Stop; bannerRoute.text = s.Phase + " / pekerja tetap diam"; }
             else if (s.NavigationWaiting) { bannerRouteIcon.text = I.Clock; bannerRoute.text = "Menunggu rute terbaru dari edge"; }
             else if (s.TargetExit < 0) { bannerRouteIcon.text = I.Stop; bannerRoute.text = "Tidak ada rute aman yang tersisa"; }
             else if (s.Adaptive) { bannerRouteIcon.text = I.Route; bannerRoute.text = "Rute ke zona aman " + (s.TargetExit + 1) + " · " + s.RouteDistance.ToString("F0") + " m"; }
@@ -484,6 +507,7 @@ namespace SafeMining
             }
             directionIcon.text = glyph; directionIcon.color = directionText.color = color; directionText.text = text;
             distanceText.text = !glasses ? "Tekan G untuk menyalakan petunjuk"
+                : s.StoryHolding ? "Jalur ditahan sampai pemeriksaan selesai"
                 : !s.NavigationWaiting && s.TargetExit >= 0 ? "Zona aman " + (s.TargetExit + 1) + " · " + s.RouteDistance.ToString("F0") + " m" : "Menunggu rute";
         }
 

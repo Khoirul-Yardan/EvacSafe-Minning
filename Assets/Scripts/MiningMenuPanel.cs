@@ -158,12 +158,13 @@ namespace SafeMining
             StyleModeCard(fppCard, mode == MiningMode.FirstPerson);
             navigation.Select(adaptive ? 0 : 1);
             navigationHelp.text = adaptive
-                ? "Rute dihitung ulang dari posisi pekerja setiap kali status bahaya berubah."
+                ? "Utamakan jalur jauh dari bahaya, lalu jarak terpendek. Mode Cerita berhenti untuk pemeriksaan sebelum memetakan ulang."
                 : "Rute awal dipertahankan sebagai pembanding, tanpa perencanaan ulang.";
             scenario.Select((int)simulation.scenarioMode);
             scenarioHelp.text = simulation.scenarioMode == HazardScenarioMode.Scripted ? "Urutan tetap: D01 lalu D02. Cocok untuk demo berulang."
                 : simulation.scenarioMode == HazardScenarioMode.NoHazards ? "Tanpa longsor otomatis, sebagai kontrol pembanding."
-                : "Skenario tantangan: bahaya pertama diprioritaskan pada rute awal yang memiliki alternatif. Seed " + simulation.scenarioSeed + ".";
+                : "Lokasi diacak dari seluruh detektor, termasuk kejadian pertama. " +
+                    (simulation.randomSeedOnLaunch ? "Mulai dari menu = seed baru; Ulang = seed yang sama." : "Seed tetap " + simulation.scenarioSeed + "; gunakan Acak ulang untuk menggantinya.");
             var active = simulation.hazardSource;
             source.Select(active == HazardSource.MqttEdgeSimulation ? 0 : active == HazardSource.LocalEdgeSimulation ? 1 : 2);
             sourceHelp.text = active == HazardSource.MqttEdgeSimulation ? "Broker dan Python di Docker menjalankan klasifikasi serta perencanaan rute. Simulasi biasa memakai pilihan ini."
@@ -174,11 +175,13 @@ namespace SafeMining
             fppControls.SetActive(mode == MiningMode.FirstPerson);
         }
 
-        // Keeps the two-column layout inside narrow aspect ratios (e.g. 4:3 projectors).
+        // Keeps the two-column layout on screen. Shrinks only when it does not fit, so 4:3 and 16:10 stay full size.
         public void FitToScreen()
         {
-            float aspect = Screen.height > 0 ? Screen.width / (float)Screen.height : 16f / 9f;
-            content.localScale = Vector3.one * Mathf.Clamp(aspect / 1.72f, .72f, 1f);
+            var area = ((RectTransform)content.parent).rect;
+            if (content.rect.width <= 0 || area.width <= 0) return;
+            float fit = Mathf.Min((area.width - 64) / content.rect.width, (area.height - 48) / content.rect.height);
+            content.localScale = Vector3.one * Mathf.Clamp(fit, .6f, 1f);
         }
     }
 }

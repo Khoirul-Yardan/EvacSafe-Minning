@@ -93,7 +93,7 @@ namespace SafeMining
             float scale = Mathf.Min(r.width / (maxX - minX + 3), r.height / (maxY - minY + 3));
             Vector2 Origin(Vector2Int p) => r.center + ((Vector2)p - center) * scale;
             foreach (var cell in Simulation.Cells) Rect(vh, Origin(cell), new Vector2(scale * .93f, scale * .93f), S.Line);
-            if (!Simulation.NavigationWaiting && (Simulation.GlassesEnabled || Simulation.Mode == MiningMode.Story))
+            if (!Simulation.StoryHolding && !Simulation.NavigationWaiting && (Simulation.GlassesEnabled || Simulation.Mode == MiningMode.Story))
                 foreach (var cell in Simulation.Route) Rect(vh, Origin(cell), Vector2.one * (scale * .45f), S.Safe);
             foreach (var site in Simulation.HazardSites) Rect(vh, Origin(site), Vector2.one * scale * .3f, S.TextSecondary);
             for (int i = 0; i < Simulation.HazardSites.Count; i++)

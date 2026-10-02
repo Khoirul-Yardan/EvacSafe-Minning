@@ -30,6 +30,8 @@
 /Assets/Scripts/MiningHudView.cs*              @RockHead07 @Maaulln
 /Assets/Resources/Fonts/                       @RockHead07 @Maaulln
 /Tools/UI/                                     @RockHead07 @Maaulln
+/Assets/Models/Worker*                         @RockHead07 @Maaulln
+/Assets/Scripts/MiningWorkerAvatar.cs*         @RockHead07 @Maaulln
 
 # Pengaturan global yang dikunci selama pengembangan
 /ProjectSettings/                              @Khoirul-Yardan

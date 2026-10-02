@@ -14,7 +14,7 @@ namespace SafeMining
     public enum MiningMode { Story, FirstPerson }
     public enum SessionState { Menu, Running, Paused, Success, Blocked }
 
-    public class MiningSimulation : MonoBehaviour
+    public partial class MiningSimulation : MonoBehaviour
     {
         [Header("Denah prosedural (ubah sebelum Play; X/Y = grid X/Z)")]
         public List<MineCorridor> corridors = MineLayout.DefaultCorridors();
@@ -43,7 +43,7 @@ namespace SafeMining
         public bool UsesEdgePlanner => ActiveHazardSource == HazardSource.MqttEdgeSimulation;
         public bool NavigationWaiting => UsesEdgePlanner && EdgeRouteSession != null &&
             (EdgeRouteSession.Pending || !EdgeRouteSession.HasRoute);
-        public string ActivePlanner => UsesEdgePlanner ? "python-edge-dijkstra-v1" : "unity-local-dijkstra-v1";
+        public string ActivePlanner => UsesEdgePlanner ? "python-edge-safety-dijkstra-v2" : "unity-local-safety-dijkstra-v2";
         public string TerminalReason { get; private set; }
         public float HazardToRouteMs { get; private set; }
         public float MaxHazardToRouteMs { get; private set; }
@@ -137,6 +137,7 @@ namespace SafeMining
             RenderSettings.fogMode = FogMode.ExponentialSquared; RenderSettings.fogDensity = .012f;
             HazardSites = MiningHazardScenario.DetectorSites(Cells);
             BuildActor(); BuildHazards(); BuildAtmosphere();
+            storyCues = gameObject.AddComponent<MiningStoryCues>(); storyCues.Initialize(this);
             if (randomSeedOnLaunch) scenarioSeed = Guid.NewGuid().GetHashCode();
             hud = gameObject.AddComponent<MiningHUD>(); hud.Simulation = this;
             telemetry = GetComponent<MiningTelemetry>() ?? gameObject.AddComponent<MiningTelemetry>(); telemetry.Simulation = this;
@@ -293,6 +294,7 @@ namespace SafeMining
             SessionRevision++;
             EdgeRouteSession?.Dispose(); EdgeRouteSession = null;
             EdgeSession?.Dispose(); EdgeSession = null; edgeError = null;
+            ResetStory();
             LearningSession = learningSession;
             LearningPreCorrect = continueLearning ? previousPreCorrect : null;
             LearningPostCorrect = null;
@@ -304,7 +306,7 @@ namespace SafeMining
             pitch = 0; gravityVelocity = 0; nextPlan = 0; lastContact = false; GlassesEnabled = true;
             stride = bobOffset = 0; headlamp.enabled = true;
             Blocked.Clear(); eventRows.Clear(); ExportStatus = "";
-            ActiveSeed = scenarioSeed; ActiveScenario = learningSession ? HazardScenarioMode.Scripted : scenarioMode;
+            ActiveSeed = scenarioSeed; ActiveScenario = scenarioMode;
             activeWarningPenalty = Mathf.Max(0, warningRiskPenalty);
             Schedule = MiningHazardScenario.Create(Cells, HazardSites, ActiveScenario, ActiveSeed,
                 randomEventCount, firstWarningSeconds, secondsBetweenEvents, warningDurationSeconds);
@@ -331,8 +333,10 @@ namespace SafeMining
                         {
                             bool changed = HazardLevels[index] != level;
                             ApplyHazard(index, level);
-                            if (changed && Adaptive && !UsesEdgePlanner) EdgeSession.TraceRoute(TargetExit, ResponseMs);
+                            if (changed && Adaptive && !UsesEdgePlanner && Mode != MiningMode.Story) EdgeSession.TraceRoute(TargetExit, ResponseMs);
                         });
+                    EdgeSession.VibrationSampled += ObserveStoryVibration;
+                    EdgeSession.HazardApplied += ObserveStoryReport;
                     if (UsesEdgePlanner)
                         EdgeRouteSession = new MiningEdgeRouteSession(mqttSettings, EdgeSession.SessionId,
                             EdgeSession.LayoutId, EdgeSession.TraceNavigation);
@@ -361,7 +365,7 @@ namespace SafeMining
             else if (State == SessionState.Paused) State = SessionState.Running;
             SetCursor();
         }
-        public void Menu() { State = SessionState.Menu; EdgeRouteSession?.Dispose(); EdgeSession?.Dispose(); workerVisual.gameObject.SetActive(true); headlamp.enabled = true; SetCursor(); }
+        public void Menu() { State = SessionState.Menu; EdgeRouteSession?.Dispose(); EdgeSession?.Dispose(); ResetStory(); workerVisual.gameObject.SetActive(true); headlamp.enabled = true; SetCursor(); }
         public void ToggleGlasses()
         {
             if (Mode == MiningMode.FirstPerson && State == SessionState.Running) GlassesEnabled = !GlassesEnabled;
@@ -399,13 +403,15 @@ namespace SafeMining
                 {
                     TerminalReason = EdgeRouteSession.FailureReason; State = SessionState.Blocked;
                     Phase = "Navigasi tidak tersedia";
-                    Dialogue = "Rute dari edge tidak tersedia. Periksa layanan navigasi, lalu ulangi sesi.";
+                    Dialogue = EdgeRouteSession.FailureMessage;
                     LogEvent("navigation_failure", TerminalReason); SetCursor();
                 }
-                else if (EdgeRouteSession != null && EdgeRouteSession.NeedsRequest) Plan(false);
+                else if (EdgeRouteSession != null && EdgeRouteSession.NeedsRequest && !StoryHolding) Plan(false);
             }
             if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
-            if (!NavigationWaiting) { if (Mode == MiningMode.Story) MoveStory(dt); else MovePlayer(dt); }
+            TickStory();
+            if (State != SessionState.Running) { UpdateCamera(false); UpdateArrows(); return; }
+            if (!NavigationWaiting && !StoryHolding) { if (Mode == MiningMode.Story) MoveStory(dt); else MovePlayer(dt); }
             if (body.isGrounded) gravityVelocity = -2; else gravityVelocity -= 20 * dt;
             body.Move(Vector3.up * (gravityVelocity * dt));
             Travelled += Vector3.Distance(Flat(previousPosition), Flat(Actor.position)); previousPosition = Actor.position;
@@ -417,7 +423,7 @@ namespace SafeMining
             for (int i = 0; i < MineLayout.Exits.Length; i++)
                 if (Vector3.Distance(Flat(Actor.position), MineLayout.World(MineLayout.Exits[i])) < 1.8f)
                 {
-                    TargetExit = i; State = SessionState.Success; TerminalReason = "reached_exit"; Phase = "05 / Evakuasi selesai";
+                    TargetExit = i; State = SessionState.Success; TerminalReason = "reached_exit"; Phase = Mode == MiningMode.Story ? "08 / Evakuasi selesai" : "05 / Evakuasi selesai";
                     Dialogue = "Tim: Kita sudah berada di zona aman. Lakukan pendataan anggota dan tunggu arahan petugas.";
                     LogEvent("success", "refuge_" + (i + 1)); SetCursor(); break;
                 }
@@ -429,6 +435,15 @@ namespace SafeMining
         {
             if (State != SessionState.Menu) return;
             scenarioMode = HazardScenarioMode.Random; scenarioSeed = Guid.NewGuid().GetHashCode();
+        }
+
+        // Menu starts a fresh experiment; Begin/R/retry retain the seed for reproducible comparisons.
+        public void BeginNewSession(MiningMode mode, bool adaptive, bool learningSession = false)
+        {
+            if (State != SessionState.Menu) return;
+            if (scenarioMode == HazardScenarioMode.Random && randomSeedOnLaunch &&
+                SessionRevision > 0 && scenarioSeed == ActiveSeed) NewRandomScenario();
+            Begin(mode, adaptive, learningSession);
         }
 
         void RunTimeline()
@@ -471,7 +486,13 @@ namespace SafeMining
                     level == 2 ? ": longsor menutup lorong. " + (Adaptive ? "Mencari rute menuju zona aman." : "Baseline tetap memakai rute awal.") : ": kondisi lokasi diperbarui menjadi normal.");
             if (radioAlarm != null) radioAlarm.Play();
             LogEvent("hazard", index + ":" + level);
-            if (Adaptive) Plan(true);
+            if (Mode == MiningMode.Story)
+            {
+                if (Adaptive && UsesEdgePlanner && hazardRouteWatch == null) hazardRouteWatch = Stopwatch.StartNew();
+                ObserveStoryHazard(index, level);
+                if (ActiveHazardSource == HazardSource.LegacyTimeline) ResolveStoryReport(index, level, Elapsed);
+            }
+            else if (Adaptive) Plan(true);
             if (level == 2 && MineLayout.Cell(Actor.position) == HazardSites[index])
             {
                 HazardContacts++; State = SessionState.Blocked; TerminalReason = "landslide_at_player"; Phase = "Terpapar longsor";
@@ -517,7 +538,7 @@ namespace SafeMining
 
         bool ApplyEdgeRoute(EdgeRouteResponse response)
         {
-            if (State != SessionState.Running || response.stateRevision != hazardRevision ||
+            if (State != SessionState.Running || (StoryHolding && storyStage != StoryStage.Mapping) || response.stateRevision != hazardRevision ||
                 new Vector2Int(response.startX, response.startZ) != MineLayout.Cell(Actor.position)) return false;
             var newPath = new List<Vector2Int>();
             for (int i = 0; i < response.pathX.Length; i++) newPath.Add(new Vector2Int(response.pathX[i], response.pathZ[i]));
@@ -635,12 +656,14 @@ namespace SafeMining
                 desired = eye + direction.normalized * Mathf.Max(.25f, hit.distance - .15f);
             ViewCamera.transform.position = snap ? desired : Vector3.Lerp(ViewCamera.transform.position, desired, Time.deltaTime * 10);
             ViewCamera.transform.LookAt(eye + Actor.forward * 3);
+            if (Mode == MiningMode.Story && State == SessionState.Running && StoryTremor > 0)
+                ViewCamera.transform.rotation *= Quaternion.Euler(Mathf.Sin(Elapsed * 37) * StoryTremor * .35f, 0, Mathf.Sin(Elapsed * 29) * StoryTremor * .6f);
         }
 
         void UpdateArrows()
         {
             foreach (var arrow in arrows) arrow.SetActive(false);
-            if (State != SessionState.Running || NavigationWaiting || (Mode == MiningMode.FirstPerson && !GlassesEnabled) || Route.Count == 0) return;
+            if (State != SessionState.Running || StoryHolding || NavigationWaiting || (Mode == MiningMode.FirstPerson && !GlassesEnabled) || Route.Count == 0) return;
             Vector3 from = Flat(Actor.position); int count = 0;
             foreach (var cell in Route)
             {
@@ -660,6 +683,7 @@ namespace SafeMining
 
         public string DirectionHint()
         {
+            if (StoryHolding) return "BERHENTI / PERIKSA JALUR";
             if (NavigationWaiting) return "MENUNGGU RUTE DARI EDGE";
             if (Route.Count == 0) return "TIDAK ADA RUTE AMAN";
             if (Blocked.Contains(Route[0])) return "RUTE TERHALANG - BERHENTI";
@@ -675,7 +699,7 @@ namespace SafeMining
         [Serializable] class ExperimentConfig
         {
             public int seed;
-            public string scenario, planner, unityVersion, mode;
+            public string scenario, planner, unityVersion, mode, storyPolicy;
             public float fppWalkSpeed, fppSprintSpeed;
             public float warningRiskPenalty;
             public float cellSize = MineLayout.CellSize, workerSpeed = 2.8f, exposureRadius = 4.5f;
@@ -724,6 +748,7 @@ namespace SafeMining
                     edgeDataStale = EdgeSession?.DataStale ?? false,
                     seed = ActiveSeed, scenario = ActiveScenario.ToString(), warningRiskPenalty = activeWarningPenalty,
                     mode = Mode.ToString(), fppWalkSpeed = walkSpeed, fppSprintSpeed = sprintSpeed,
+                    storyPolicy = Mode == MiningMode.Story ? "stop_check_confirm_map_resume_v1" : "manual",
                     detectorSites = HazardSites.ToArray(), schedule = Schedule.ToArray(),
                     unityVersion = Application.unityVersion, planner = ActivePlanner,
                     plannerLocation = UsesEdgePlanner ? "separate_python_process_via_mqtt" : "unity_process",

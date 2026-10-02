@@ -66,7 +66,9 @@ Setiap perubahan UI diuji langsung di Unity Editor melalui Play mode dengan sken
 |---|---|---|
 | Runner `MiningExperienceValidation` mencari tombol lama `"Mulai Mode FPP  >"` (rusak sejak commit `5bbfac1`) | Belum diperbaiki; menu baru menyediakan nama stabil `FPP mode` dan `Start simulation` | Khoirul-Yardan |
 | Uji UI pada jalur MQTT dengan broker nyata | Belum; butuh Docker dan image edge Python | Tim |
-| Uji resolusi 1280×720, 16:10, dan build player | Belum | Orang 2 |
+| Uji resolusi 1280×720, 1366×768, 16:10, dan 4:3 | Selesai 30 September; tiga masalah tata letak di 4:3 diperbaiki | Orang 2 |
+| Uji build player | Build Windows 30 September berhasil (sebelum karakter baru); belum diuji ulang dengan karakter | Orang 2 |
+| Karakter pekerja ber-rig menggantikan pekerja prosedural | Selesai 30 September, lihat [Karakter pekerja](KARAKTER_PEKERJA_2026-09-30.md); mode FPP belum diuji | Orang 2 |
 | Tulisan dunia 3D (papan, layar detektor) masih font bawaan | Di luar lingkup, berkas milik Orang 1 | Khoirul-Yardan |
 | `Deskripsi lengkap.md` bagian 10 masih menggambarkan HUD lama | Perlu diperbarui pemilik dokumen | Khoirul-Yardan |
 | Batas trace MQTT sekitar 3,5 menit karena setiap sampel dicatat dua kali | Belum diubah; sesi Cerita aman, sesi FPP panjang berisiko | Khoirul-Yardan, Maaulln |

@@ -58,21 +58,13 @@ namespace SafeMining
             var random = new System.Random(seed);
             var available = new List<int>();
             for (int i = 0; i < sites.Count; i++) available.Add(i);
-            var initialRoute = MineLayout.FindPath(cells, MineLayout.Spawn, new HashSet<Vector2Int>(), out _);
-            var firstChoices = new List<int>();
-            foreach (int i in available)
-            {
-                // Random challenge on the initial route, where an alternative exists initially.
-                if (initialRoute.Contains(sites[i]) && MineLayout.FindPath(cells, MineLayout.Spawn,
-                    new HashSet<Vector2Int> { sites[i] }, out _).Count > 0) firstChoices.Add(i);
-            }
             var result = new List<ScheduledRockfall>();
             float time = Mathf.Max(4, firstWarning);
             float lead = Mathf.Max(2, warningDuration);
             for (int e = 0; e < Mathf.Clamp(count, 1, sites.Count); e++)
             {
-                var pool = e == 0 && firstChoices.Count > 0 ? firstChoices : available;
-                int selected = pool[random.Next(pool.Count)]; available.Remove(selected);
+                // Every detector is eligible from the first event; no bias toward the central route.
+                int selected = available[random.Next(available.Count)]; available.Remove(selected);
                 float warning = time + (float)random.NextDouble() * 2;
                 result.Add(new ScheduledRockfall(selected, warning, warning + lead));
                 time = warning + lead + Mathf.Max(2, interval);
