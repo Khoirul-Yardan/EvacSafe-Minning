@@ -68,8 +68,23 @@ Setiap perubahan UI diuji langsung di Unity Editor melalui Play mode dengan sken
 | Uji UI pada jalur MQTT dengan broker nyata | Belum; butuh Docker dan image edge Python | Tim |
 | Uji resolusi 1280×720, 1366×768, 16:10, dan 4:3 | Selesai 30 September; tiga masalah tata letak di 4:3 diperbaiki | Orang 2 |
 | Uji build player | Build Windows 30 September berhasil (sebelum karakter baru); belum diuji ulang dengan karakter | Orang 2 |
-| Karakter pekerja ber-rig menggantikan pekerja prosedural | Selesai 30 September, lihat [Karakter pekerja](KARAKTER_PEKERJA_2026-09-30.md); mode FPP belum diuji | Orang 2 |
+| Karakter pekerja ber-rig menggantikan pekerja prosedural | Selesai 30 September dan 1 Oktober, lihat [Karakter pekerja](KARAKTER_PEKERJA_2026-09-30.md); mode FPP belum diuji | Orang 2 |
+| Uji UI pada jalur MQTT dengan broker nyata | Dijalankan 30 September (Docker) saat mengambil Gambar 4; HUD menampilkan "MQTT · planner Python edge" dengan benar | Orang 2 |
+| Kamera Cerita masuk ke badan karakter saat pekerja berhenti di lorong sempit (skala 1,3) | Belum diperbaiki; pilihan cepat: `MiningWorkerAvatar.Scale` sekitar 1,1 | Orang 2 |
+| Isi naskah masih menyebut Gambar 4 seed 101 dan Gambar 5 seed 106 | Menunggu keputusan tim, lihat [README naskah](Paper/README.md) | Tim |
 | Tulisan dunia 3D (papan, layar detektor) masih font bawaan | Di luar lingkup, berkas milik Orang 1 | Khoirul-Yardan |
 | `Deskripsi lengkap.md` bagian 10 masih menggambarkan HUD lama | Perlu diperbarui pemilik dokumen | Khoirul-Yardan |
 | Batas trace MQTT sekitar 3,5 menit karena setiap sampel dicatat dua kali | Belum diubah; sesi Cerita aman, sesi FPP panjang berisiko | Khoirul-Yardan, Maaulln |
 | Migrasi ke TextMeshPro dan CI Unity (GameCI) | Setelah submission | Tim |
+
+## 8. Catatan 30 September sampai 1 Oktober
+
+**Git.** PR #1 di-merge Irawan ke `main` (29 September). Branch lokal di-fast-forward ke `main`, lalu ke `origin/main2` milik Yardan (commit `936dd98`: alur Cerita dengan jeda pemeriksaan, routing aman, validasi). Pekerjaan berikutnya ada di branch `feat/worker-character` dan PR #2 ke `main`. Karena branch ini berangkat dari `main2`, PR #2 ikut memuat `936dd98` sampai `main2` masuk `main`. Perubahan sesudah PR #2 dibuka (animasi, naskah, `Tools/`, dokumen ini) di-commit 3 Oktober di branch yang sama.
+
+**Karakter pekerja.** Model Sketchfab CC BY (miner, kacamata futuristik, lampu kepala) dirakit di Blender tanpa jendela, diekspor ke FBX untuk Unity Humanoid, lalu dipasang saat Play oleh `MiningWorkerAvatar` tanpa mengubah berkas simulasi atau scene. Animasi bawaan model (pola Mannequin Unreal) dibuang demi lisensi; animasi dari Mixamo. Format terbaik untuk karakter Unity adalah FBX; GLB butuh glTFast yang hanya terpasang lokal lewat Coplay. Rincian: [Karakter pekerja](KARAKTER_PEKERJA_2026-09-30.md), [Riset pipeline](RISET_PIPELINE_KARAKTER_BLENDER_2026-09-30.md), `Tools/Blender/`.
+
+**Animasi.** Pose berdiri dipilih dari tahap Cerita milik Yardan (`StoryStep`): Radio saat briefing dan saat rute dipetakan, Look Around saat getaran dan pemeriksaan jalur serta saat statis terhalang, Injured setelah kontak dengan area tertutup. Jog Mixamo berisi tiga langkah sehingga blend dengan Walk tersendat; dipotong ke satu langkah dan fasenya diselaraskan. Ukuran karakter 2 ditolak karena menutupi jalur, dipakai 1,3.
+
+**Naskah.** Naskah LaTeX disimpan di `Documentation/Paper/` dengan gambar pengganti placeholder, dan isinya disinkronkan dengan revisi Google Docs 3 Oktober (Pendahuluan, pustaka [8] sampai [11], Lampiran). Data pada Gambar 4 dan 5 tidak sama dengan tabel karena logika simulasi sekarang berbeda dari versi eksperimen; caption menyebutnya, isi naskah belum. Versi DOCX dibuat dengan `Tools/Paper/tex2docx.py`. Rincian dan pilihan: [README naskah](Paper/README.md).
+
+**Alat.** Probe Unity untuk resolusi, gambar naskah, dan jejak animasi ada di `Tools/UnityProbes/`. Coplay `execute_script` meng-compile assembly baru setiap panggilan dan tidak menampilkan pesan error compile. Unity dapat mengubah scene utama saat Play atau build; berkas itu (dan `Assets/Settings`, `ProjectSettings`) dikembalikan dengan `git restore`, tidak di-commit. Folder `Assets/_Recovery/` adalah cadangan scene dari Unity setelah crash dan tidak di-commit.
