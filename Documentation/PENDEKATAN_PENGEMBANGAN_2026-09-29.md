@@ -16,7 +16,7 @@ Alasan: tim berdiri di atas satu scene dan satu repo menjelang deadline; perubah
 
 ## 2. Alur git, CI, dan aturan branch
 
-- Pekerjaan baru di branch lalu masuk lewat Pull Request ke `main`. Push langsung ke `main` masih diizinkan sampai 30 September agar tim tidak terhambat.
+- Pekerjaan baru di branch lalu masuk lewat Pull Request ke `main`. Push langsung ke `main` masih diizinkan sampai 30 September agar tim tidak terhambat. Pada 3 Oktober push langsung ke `main` dipakai sekali untuk commit lanjutan PR #2 yang sudah di-merge (lihat bagian 8).
 - CI tahap 1 berjalan di setiap push dan PR, tanpa lisensi Unity dan tanpa mengunduh Git LFS: pasangan `.meta`, kunci versi Unity 6000.3.23f1, berkas lokal yang tidak boleh ter-commit, ukuran berkas, tautan dokumentasi, sintaks skrip Python, unit test edge Python, dan validasi `docker compose`.
 - Ruleset tahap 1 hanya melarang force-push dan penghapusan `main`; diaktifkan oleh admin repo. Tahap 2 (setelah submission) mewajibkan PR, review CODEOWNERS, status check hijau, dan CI Unity dengan GameCI.
 - Commit dipisah per perubahan yang bermakna, tanpa atribusi AI, dan berkas yang bukan hasil kerja sendiri tidak ikut di-stage.
@@ -77,14 +77,26 @@ Setiap perubahan UI diuji langsung di Unity Editor melalui Play mode dengan sken
 | Batas trace MQTT sekitar 3,5 menit karena setiap sampel dicatat dua kali | Belum diubah; sesi Cerita aman, sesi FPP panjang berisiko | Khoirul-Yardan, Maaulln |
 | Migrasi ke TextMeshPro dan CI Unity (GameCI) | Setelah submission | Tim |
 
-## 8. Catatan 30 September sampai 1 Oktober
+## 8. Catatan 30 September sampai 3 Oktober
 
-**Git.** PR #1 di-merge Irawan ke `main` (29 September). Branch lokal di-fast-forward ke `main`, lalu ke `origin/main2` milik Yardan (commit `936dd98`: alur Cerita dengan jeda pemeriksaan, routing aman, validasi). Pekerjaan berikutnya ada di branch `feat/worker-character` dan PR #2 ke `main`. Karena branch ini berangkat dari `main2`, PR #2 ikut memuat `936dd98` sampai `main2` masuk `main`. Perubahan sesudah PR #2 dibuka (animasi, naskah, `Tools/`, dokumen ini) di-commit 3 Oktober di branch yang sama.
+**Git.** PR #1 di-merge Irawan ke `main` (29 September). Branch lokal di-fast-forward ke `main`, lalu ke `origin/main2` milik Yardan (commit `936dd98`: alur Cerita dengan jeda pemeriksaan, routing aman, validasi). Pekerjaan berikutnya dibuat di branch `feat/worker-character` dan PR #2, yang di-merge ke `main` pada 2 Oktober (`ae3932e`) tanpa review dari anggota tim; review otomatis Copilot kosong karena kuota habis. Karena branch berangkat dari `main2`, `main` kini juga memuat `936dd98` milik Yardan. Empat commit lanjutan (animasi, `Tools/`, naskah, catatan ini) masuk langsung ke `main` pada 3 Oktober lewat cherry-pick agar riwayat tetap lurus, atas keputusan Bagus karena PR sudah tertutup dan tidak ada respons tim. CI hijau di setiap langkah.
+
+Alur yang dipakai selama periode ini, untuk diulang bila perlu:
+
+1. `git fetch` dan bandingkan `main` serta branch tim (`main2`, `feat/*`) sebelum mulai; anggota tim juga mengubah berkas UI.
+2. Perubahan lokal yang belum di-commit disimpan dengan `git stash push -- <berkas sendiri>`, lalu `git merge --ff-only`, lalu `git stash pop`.
+3. Scene utama, `Assets/Settings`, `ProjectSettings`, `Assets/_Recovery`, dan `.vsconfig` tidak pernah di-stage; Unity mengubahnya sendiri saat Play atau build.
+4. Sebelum push: `python Tools/CI/check_doc_links.py` dan `python Tools/CI/check_unity_repo.py`.
+5. Commit dipisah per unit yang sudah diverifikasi di Play mode, tanpa atribusi AI.
 
 **Karakter pekerja.** Model Sketchfab CC BY (miner, kacamata futuristik, lampu kepala) dirakit di Blender tanpa jendela, diekspor ke FBX untuk Unity Humanoid, lalu dipasang saat Play oleh `MiningWorkerAvatar` tanpa mengubah berkas simulasi atau scene. Animasi bawaan model (pola Mannequin Unreal) dibuang demi lisensi; animasi dari Mixamo. Format terbaik untuk karakter Unity adalah FBX; GLB butuh glTFast yang hanya terpasang lokal lewat Coplay. Rincian: [Karakter pekerja](KARAKTER_PEKERJA_2026-09-30.md), [Riset pipeline](RISET_PIPELINE_KARAKTER_BLENDER_2026-09-30.md), `Tools/Blender/`.
 
 **Animasi.** Pose berdiri dipilih dari tahap Cerita milik Yardan (`StoryStep`): Radio saat briefing dan saat rute dipetakan, Look Around saat getaran dan pemeriksaan jalur serta saat statis terhalang, Injured setelah kontak dengan area tertutup. Jog Mixamo berisi tiga langkah sehingga blend dengan Walk tersendat; dipotong ke satu langkah dan fasenya diselaraskan. Ukuran karakter 2 ditolak karena menutupi jalur, dipakai 1,3.
 
 **Naskah.** Naskah LaTeX disimpan di `Documentation/Paper/` dengan gambar pengganti placeholder, dan isinya disinkronkan dengan revisi Google Docs 3 Oktober (Pendahuluan, pustaka [8] sampai [11], Lampiran). Data pada Gambar 4 dan 5 tidak sama dengan tabel karena logika simulasi sekarang berbeda dari versi eksperimen; caption menyebutnya, isi naskah belum. Versi DOCX dibuat dengan `Tools/Paper/tex2docx.py`. Rincian dan pilihan: [README naskah](Paper/README.md).
+
+**Sinkronisasi naskah.** Google Docs tetap menjadi tempat tim menulis; `document.tex` disamakan dengan cara mengekspor dokumen (`.../export?format=docx`), membandingkan per paragraf dengan isi LaTeX, lalu menerapkan hanya perubahan teks. Caption gambar yang tidak sesuai dengan isi gambar tidak diikuti dan dicatat di README naskah. Yang masih perlu diputuskan Irawan: teks "Sargent [10]" dan "STRESS [11]" yang tidak cocok dengan pustaka barunya, serta rujukan seed 101 dan 106 untuk Gambar 4 dan 5.
+
+**Pengujian tampilan.** Setiap perubahan karakter dan animasi diuji di Play mode lewat Coplay: impor Humanoid diperiksa (52 tulang terpetakan), urutan state Animator dicatat per tahap simulasi (`Tools/UnityProbes/AnimTrace.cs`), dan setiap pose difoto. Jalur MQTT diuji dengan broker dan edge Python di Docker. Build Windows berhasil sebelum karakter baru; build dengan karakter dan mode FPP belum diuji.
 
 **Alat.** Probe Unity untuk resolusi, gambar naskah, dan jejak animasi ada di `Tools/UnityProbes/`. Coplay `execute_script` meng-compile assembly baru setiap panggilan dan tidak menampilkan pesan error compile. Unity dapat mengubah scene utama saat Play atau build; berkas itu (dan `Assets/Settings`, `ProjectSettings`) dikembalikan dengan `git restore`, tidak di-commit. Folder `Assets/_Recovery/` adalah cadangan scene dari Unity setelah crash dan tidak di-commit.
