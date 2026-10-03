@@ -42,6 +42,16 @@ namespace SafeMining.EditorTools
                 clip.lockRootRotation = clip.lockRootHeightY = true;
                 clip.lockRootPositionXZ = !oneShot;
                 clip.keepOriginalOrientation = clip.keepOriginalPositionY = clip.keepOriginalPositionXZ = true;
+                clip.loopPose = !oneShot; // blends the last frame into the first so small seams do not pop
+                if (name == "Worker_Jog")
+                {
+                    // Mixamo's jog holds three strides; the walk/jog/run blend tree needs one stride per clip, or the
+                    // feet fall out of step. Frames 23-48 are the stride with the smallest loop seam.
+                    clip.firstFrame = 23; clip.lastFrame = 48;
+                }
+                // Line the left-foot strike up with the walk cycle (about 40 percent into the clip).
+                if (name == "Worker_Jog") clip.cycleOffset = .06f;
+                if (name == "Worker_Run") clip.cycleOffset = -.03f;
             }
             importer.clipAnimations = clips;
         }
@@ -144,7 +154,7 @@ namespace SafeMining.EditorTools
             // Speed is the worker's speed divided by the character scale, so the stride matches the ground.
             controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
             controller.AddParameter("LocoRate", AnimatorControllerParameterType.Float);
-            controller.AddParameter("Radio", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("Pose", AnimatorControllerParameterType.Int); // standing pose, see MiningWorkerAvatar.StandingPose
             controller.AddParameter("RunStop", AnimatorControllerParameterType.Trigger);
             var parameters = controller.parameters; parameters[1].defaultFloat = 1; controller.parameters = parameters;
 
@@ -170,15 +180,27 @@ namespace SafeMining.EditorTools
                 var toIdle = stop.AddTransition(idle); toIdle.hasExitTime = true; toIdle.exitTime = .9f; toIdle.duration = .15f;
                 Link(stop, locomotion, AnimatorConditionMode.Greater, "Speed", .2f);
             }
-            Link(locomotion, idle, AnimatorConditionMode.Less, "Speed", .2f);
-
-            var radioClip = Clip("Worker_RadioTalk");
-            if (radioClip != null)
+            // Standing poses chosen by the simulation stage; every pair links directly so a stage change does not
+            // detour through Idle. Missing clips fall back to Idle.
+            var standing = new System.Collections.Generic.List<(AnimatorState state, int pose)> { (idle, (int)MiningWorkerAvatar.StandingPose.Idle) };
+            foreach (var (pose, clip) in new[] { (MiningWorkerAvatar.StandingPose.Radio, "Worker_RadioTalk"),
+                (MiningWorkerAvatar.StandingPose.LookAround, "Worker_LookAround"), (MiningWorkerAvatar.StandingPose.Injured, "Worker_InjuredIdle") })
             {
-                var radio = machine.AddState("Radio"); radio.motion = radioClip;
-                Link(idle, radio, AnimatorConditionMode.If, "Radio", 0);
-                Link(radio, idle, AnimatorConditionMode.IfNot, "Radio", 0);
-                Link(radio, locomotion, AnimatorConditionMode.Greater, "Speed", .2f);
+                var motion = Clip(clip);
+                if (motion == null) continue;
+                var state = machine.AddState(pose.ToString()); state.motion = motion;
+                standing.Add((state, (int)pose));
+            }
+            foreach (var (from, _) in standing)
+            {
+                foreach (var (to, pose) in standing)
+                    if (to != from) Link(from, to, AnimatorConditionMode.Equals, "Pose", pose);
+                if (from != idle) Link(from, locomotion, AnimatorConditionMode.Greater, "Speed", .2f);
+            }
+            foreach (var (to, pose) in standing)
+            {
+                var t = locomotion.AddTransition(to); t.hasExitTime = false; t.duration = .25f;
+                t.AddCondition(AnimatorConditionMode.Less, .2f, "Speed"); t.AddCondition(AnimatorConditionMode.Equals, pose, "Pose");
             }
             AssetDatabase.SaveAssets();
             return controller;
