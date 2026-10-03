@@ -9,7 +9,7 @@
 | "Man Miner Rig .FBX" (Sketchfab) | Dakta.Grower.Nzl | CC BY 4.0 | Rambut dan animasi bawaan dibuang, akhiran angka nama tulang dihapus, transform root diterapkan |
 | "FUTURISTIC GLASSES" (Sketchfab) | MR EXPERT | CC BY 4.0 | Diskalakan ke wajah, lensa diwarnai teal transparan |
 | "Duracell Headlamp" (Sketchfab) | Eric Wallbank | CC BY 4.0 | Tali dibuang, dipasang di depan helm, logo merek dihapus dari normal map |
-| Idle, Walk, Jog, Run, RunToStop, TalkingToRadio | Adobe Mixamo | Bebas royalti untuk game | Tanpa skin, 30 fps, In Place kecuali RunToStop |
+| Idle, Walk, Jog, Run, RunToStop, TalkingToRadio, Look Around, Injured Stumble Idle | Adobe Mixamo | Bebas royalti untuk game | Tanpa skin, 30 fps, In Place kecuali RunToStop; Jog dipotong menjadi satu langkah |
 
 Animasi bawaan model Sketchfab tidak dipakai karena pola namanya (`MM_Idle`, `MM_Walk_Fwd`) sama dengan animasi Mannequin Unreal Engine, yang hanya boleh dipakai di Unreal. Kredit lengkap juga ada di `Assets/Models/Worker/Credits.txt`.
 
@@ -19,7 +19,7 @@ Animasi bawaan model Sketchfab tidak dipakai karena pola namanya (`MM_Idle`, `MM
 |---|---|
 | `Assets/Models/Worker/SafeMiningWorker.fbx` | Karakter hasil rakitan Blender; kacamata, lampu, dan `HeadlampSocket` menjadi anak tulang `head` |
 | `Assets/Models/Worker/Animations/Mixamo/Worker_*.fbx` | Klip Mixamo, nama klip mengikuti nama berkas |
-| `Assets/Models/Worker/Animations/SafeMiningWorker.controller` | Animator: Idle, Locomotion (blend Walk, Jog, Run), Run to stop, Radio |
+| `Assets/Models/Worker/Animations/SafeMiningWorker.controller` | Animator: Locomotion (blend Walk, Jog, Run), Run to stop, dan pose berdiri Idle, Radio, LookAround, Injured yang dipilih parameter `Pose` |
 | `Assets/Models/Worker/Materials/` | Material URP Lit |
 | `Assets/Models/Worker/Editor/WorkerCharacterSetup.cs` | Aturan impor (Humanoid, Optimize Game Objects mati, klip loop dan In Place, normal map) dan menu pembangun aset |
 | `Assets/Models/Worker/Editor/WorkerEditorPreview.cs` | Menampilkan karakter di EDITOR PREVIEW tanpa mengubah scene |
@@ -34,10 +34,16 @@ Kecepatan animasi mengikuti perpindahan `Actor`, dibagi ukuran karakter, sehingg
 
 | Keadaan simulasi | Animasi |
 |---|---|
-| Briefing (detik 0 sampai 4) dan pekerja berhenti untuk pemeriksaan jalur (`StoryHolding`) | Radio |
+| Briefing (detik 0 sampai 4) | Radio |
+| Getaran terasa dan pemeriksaan jalur (`StoryStep` Tremor, Checking) | LookAround |
+| Edge mengonfirmasi dan rute dipetakan (`StoryStep` Confirmed, Mapping) | Radio |
+| Pernah kontak dengan area tertutup pada sesi ini, saat berdiri | Injured |
+| Rute statis terhalang | LookAround |
 | Bergerak | Locomotion: Walk, Jog, dan Run dicampur sesuai kecepatan |
 | Berhenti setelah berlari | Run to stop, lalu Idle |
-| Diam | Idle |
+| Siap berjalan, menu, jeda, berhasil | Idle |
+
+Klip Jog dari Mixamo berisi tiga langkah. Karena blend tree menyamakan fase antarklip, campuran Walk (satu langkah) dengan Jog (tiga langkah) membuat kaki tersendat. Aturan impor memotong Jog ke satu langkah (frame 23 sampai 48, sambungan loop paling mulus), menyelaraskan injakan kaki kiri dengan `cycleOffset`, dan menyalakan Loop Pose untuk semua klip berulang. Perpindahan instan saat sesi diulang tidak dihitung sebagai lari.
 
 Ukuran karakter diatur konstanta `MiningWorkerAvatar.Scale`, saat ini 1,3 (sekitar 2,4 m). Nilai 2 dicoba dan terlalu besar karena menutupi jalur di kamera Cerita.
 
