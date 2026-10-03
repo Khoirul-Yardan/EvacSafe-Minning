@@ -114,3 +114,9 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Paper build output (Tools/Paper, pdflatex)
+Documentation/Paper/build/
+Documentation/Paper/*.aux
+Documentation/Paper/*.out
+Documentation/Paper/*.pdf
